@@ -30,13 +30,7 @@ Chromium keeps both in LevelDB databases inside the browser profile:
 The extension id is `nkbihfbeogaeaoehlefnkodbefgpgknn` for the Chrome Web Store build (Chrome, Brave, Chromium and
 other browsers that install from that store) and `ejbalbakoplchlghecdalmeeeajnimhm` for the Edge Add-ons build.
 
-Usual profile folders (`<profile>` is `Default`, `Profile 1`, `Profile 2`...):
-
-| Browser | Windows | macOS | Linux |
-| --- | --- | --- | --- |
-| Chrome | `%LOCALAPPDATA%\Google\Chrome\User Data\` | `~/Library/Application Support/Google/Chrome/` | `~/.config/google-chrome/` |
-| Brave | `%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data\` | `~/Library/Application Support/BraveSoftware/Brave-Browser/` | `~/.config/BraveSoftware/Brave-Browser/` |
-| Edge | `%LOCALAPPDATA%\Microsoft\Edge\User Data\` | `~/Library/Application Support/Microsoft Edge/` | `~/.config/microsoft-edge/` |
+Where profiles are on each system: [recovery-guide.md](recovery-guide.md#where-profiles-are).
 
 ## Reading LevelDB (`src/leveldb.js`, `src/snappy.js`)
 
@@ -74,22 +68,48 @@ vault N".
 
 ## Decrypting (`src/decrypt.js`)
 
-The vault format is MetaMask's `@metamask/browser-passworder`:
+The vault format is MetaMask's [@metamask/browser-passworder](https://github.com/MetaMask/browser-passworder):
 
 1. Key: PBKDF2-HMAC-SHA256 of the password with `salt`, `keyMetadata.params.iterations` rounds (10000 when there is no
    `keyMetadata`, 600000 or 900000 in recent vaults), 256 bits.
 2. AES-GCM-256 decryption of `data` with `iv`. A wrong password fails GCM authentication.
 3. The plaintext is the JSON list of keyrings.
 
-Everything uses WebCrypto (`crypto.subtle`), the same in the browser and in Node.js.
+Everything uses [WebCrypto](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto) (`crypto.subtle`), the
+same in the browser and in Node.js.
 
 ## Accounts (`src/accounts.js`)
 
+The keyrings are those of MetaMask's [accounts](https://github.com/MetaMask/accounts) packages.
+
 | Keyring type | Data | What the tool shows |
 | --- | --- | --- |
-| `HD Key Tree` | `mnemonic` (string, or its UTF-8 bytes), `numberOfAccounts`, `hdPath` | The phrase, and for i < `numberOfAccounts` the address and private key at `hdPath/i` (BIP39 seed with PBKDF2-HMAC-SHA512, BIP32 with `@scure/bip32`) |
+| `HD Key Tree` | `mnemonic` (string, or its UTF-8 bytes), `numberOfAccounts`, `hdPath` (`m/44'/60'/0'/0` by default, [BIP44](https://github.com/bitcoin/bips/blob/master/bip-0044.mediawiki)) | The phrase, and for i < `numberOfAccounts` the address and private key at `hdPath/i` ([BIP39](https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki) seed with PBKDF2-HMAC-SHA512, [BIP32](https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki) with [@scure/bip32](https://github.com/paulmillr/scure-bip32)) |
 | `Simple Key Pair` | List of private keys | Address and private key of each: the imported accounts |
 | Others (Ledger, Trezor, QR, Snap...) | Addresses at most | The addresses; the keys are not in the vault |
 
-Addresses are the last 20 bytes of the Keccak-256 of the uncompressed public key (`@noble/curves` secp256k1,
-`@noble/hashes` Keccak), with the EIP-55 checksum.
+Addresses are the last 20 bytes of the Keccak-256 of the uncompressed public key
+([@noble/curves](https://github.com/paulmillr/noble-curves) secp256k1,
+[@noble/hashes](https://github.com/paulmillr/noble-hashes) Keccak), with the
+[EIP-55](https://eips.ethereum.org/EIPS/eip-55) checksum.
+
+## The web page's network lock (`web/app.js`)
+
+The page reads [`navigator.onLine`](https://developer.mozilla.org/en-US/docs/Web/API/Navigator/onLine) on load and on
+every `online`/`offline` event. While the browser reports a connection, the controls are disabled; when a connection
+appears, a generation counter is bumped and everything held is dropped, so a scan or decryption still running
+discards its result. Its limits are in [security.md](security.md#the-page-only-works-offline).
+
+## References
+
+| Project or document | Used for |
+| --- | --- |
+| [metamask-extension](https://github.com/MetaMask/metamask-extension) | Storage layout and the IndexedDB backup |
+| [@metamask/browser-passworder](https://github.com/MetaMask/browser-passworder) | Vault encryption format |
+| [MetaMask accounts](https://github.com/MetaMask/accounts) | Keyring types and their serialized data |
+| [MetaMask vault-decryptor](https://github.com/MetaMask/vault-decryptor) | Official tool; source of the test fixtures |
+| [LevelDB](https://github.com/google/leveldb) | Log and table file formats |
+| [Snappy](https://github.com/google/snappy) | Block compression format |
+| [BIP39](https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki), [BIP32](https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki), [BIP44](https://github.com/bitcoin/bips/blob/master/bip-0044.mediawiki) | Phrase to seed, HD derivation, derivation paths |
+| [EIP-55](https://eips.ethereum.org/EIPS/eip-55) | Address checksum |
+| [Hardhat](https://github.com/NomicFoundation/hardhat) | Public test phrase and accounts used in the tests |

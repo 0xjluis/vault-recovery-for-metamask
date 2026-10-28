@@ -1,23 +1,30 @@
 # MetaMask Vault Recovery
 
-Recover the accounts of a MetaMask browser extension from the files it leaves on disk, offline: the secret
-recovery phrase, the addresses and the private keys, including accounts imported with a private key, which the
-phrase alone does not restore.
+Offline tools to recover the accounts of a [MetaMask](https://github.com/MetaMask/metamask-extension) browser
+extension from the files it keeps in a Chromium browser profile: the secret recovery phrase, the addresses and the
+private keys, including accounts imported with a private key, which the phrase alone does not restore.
 
-It is meant for a computer that no longer works, or a MetaMask that no longer opens, when you still know the
-**MetaMask password** of that installation. Without that password the vault cannot be decrypted.
+Use it when MetaMask cannot be opened but its files still exist, for example:
 
-Nothing here connects to the internet. The web page's Content Security Policy blocks every network request, the
-command-line tool only reads the files you give it, and both are checked for this on every build
-([docs/security.md](docs/security.md)).
+- the computer does not start, or its disk was moved to another computer;
+- the browser profile is damaged, or MetaMask shows its onboarding screen instead of your wallet;
+- you restored a profile from a backup and need what is inside;
+- you have the recovery phrase but need the imported accounts, or the vaults of other browser profiles.
+
+You need the **MetaMask password** used in that profile: without it the vault cannot be decrypted, by this or any
+other tool.
+
+Nothing here connects to the internet. The web page's Content Security Policy blocks every network request and
+the page refuses to work while the computer is connected to a network; the command-line tool only reads the files
+you give it. Both are checked for this on every build ([docs/security.md](docs/security.md)).
 
 ## What a release contains
 
 | File | What it is |
 | --- | --- |
 | `vault-recovery.html` | Web page, one self-contained file: open it in a current browser, no install (tested in Chrome) |
-| `vault-recovery.mjs` | The same as a command-line tool, dependencies included; needs Node.js 26.12.1 or later (LTS) |
-| `find-metamask.sh` | Finds and copies MetaMask's data folders from a disk (Linux, Tails, macOS) |
+| `vault-recovery.mjs` | The same as a command-line tool, dependencies included; needs [Node.js](https://nodejs.org/) 26.12.1 or later (LTS) |
+| `find-metamask.sh` | Finds and copies MetaMask's data folders from a disk or a folder (Linux, macOS, live systems such as [Tails](https://tails.net/)) |
 | `find-metamask.ps1` | The same for Windows PowerShell |
 | `docs/` | Recovery guide, security model, how it works, how to verify a release |
 | `BUILD-INFO.txt` | Git commit and toolchain the release was built from |
@@ -27,45 +34,41 @@ command-line tool only reads the files you give it, and both are checked for thi
 
 ## Quick start
 
-1. **Copy MetaMask's data** from the browser profile: the two folders below, for each profile that had MetaMask.
-   From a computer that does not boot, start it from a Tails or Linux USB stick and use `find-metamask.sh`:
-   [docs/recovery-guide.md](docs/recovery-guide.md) explains each step.
+1. **Copy MetaMask's data folders** out of the browser profile, with `find-metamask.sh` or `find-metamask.ps1`, or
+   by hand. For each profile that had MetaMask:
 
    ```
-   <profile>/Local Extension Settings/nkbihfbeogaeaoehlefnkodbefgpgknn
-   <profile>/IndexedDB/chrome-extension_nkbihfbeogaeaoehlefnkodbefgpgknn_0.indexeddb.leveldb
+   <profile>/Local Extension Settings/<extension id>/
+   <profile>/IndexedDB/chrome-extension_<extension id>_0.indexeddb.leveldb/
    ```
 
-   Edge uses the id `ejbalbakoplchlghecdalmeeeajnimhm` instead.
+   The extension id is `nkbihfbeogaeaoehlefnkodbefgpgknn` for the Chrome Web Store build and
+   `ejbalbakoplchlghecdalmeeeajnimhm` for the Edge Add-ons build. Where profiles live, and how to reach them on a
+   computer that does not start: [docs/recovery-guide.md](docs/recovery-guide.md).
 
-2. **Disconnect from the internet.**
+2. **Disconnect the computer from every network.** The web page stays locked until you do.
 
-3. **Decrypt**, with either tool:
-   - Open `vault-recovery.html`, choose the copied folder, type the MetaMask password.
-   - Or run:
+3. **Decrypt** with either tool:
+   - open `vault-recovery.html`, choose the copied folder, type the password;
+   - or run `node vault-recovery.mjs <copied folder>`.
 
-     ```bash
-     node vault-recovery.mjs <copied folder>
-     ```
+   Both list every vault found and its accounts. Secrets stay hidden until you ask for them.
 
-   Both list every vault found with its accounts. Secrets stay hidden until you ask for them (a checkbox in the
-   page, `--show-secrets` in the CLI).
-
-4. **Write down** the secret recovery phrase and any imported private key, import them in a fresh MetaMask, then
-   delete the copied folders.
+4. **Restore** the phrase and any imported private key in a fresh MetaMask, then delete the copies.
 
 ## Why another tool
 
-MetaMask's own [vault-decryptor](https://github.com/MetaMask/vault-decryptor) searches the files with regular
-expressions and stops at the first vault. Browsers keep several copies: every older version of the stored state
-until LevelDB compacts it, and, in recent MetaMask versions, a backup copy in IndexedDB that the official tool does
-not read. This tool parses the LevelDB files and
-returns every distinct vault, which matters when the newest copy is not the one with your accounts. See
+MetaMask's [vault-decryptor](https://github.com/MetaMask/vault-decryptor) searches the files with regular
+expressions and uses the first vault it matches. Browsers keep several copies: every older version of the stored
+state until [LevelDB](https://github.com/google/leveldb) compacts it, and, in recent MetaMask versions, a backup
+copy in IndexedDB that the official tool does not read. This tool parses the LevelDB files and returns every
+distinct vault, which matters when the newest copy is not the one you need. See
 [docs/how-it-works.md](docs/how-it-works.md).
 
 ## Building from source
 
-Requirements: Node.js 26 LTS (`.nvmrc`), pnpm 12.14.0 (`packageManager` in `package.json`).
+Requirements: [Node.js](https://nodejs.org/) 26 LTS (`.nvmrc`) and [pnpm](https://pnpm.io/) 12.14.0
+(`packageManager` in `package.json`).
 
 ```bash
 pnpm install --frozen-lockfile
@@ -81,16 +84,26 @@ pnpm build
 
 | Command | What it does |
 | --- | --- |
-| `pnpm test` | Unit tests, the upstream fixtures, a real Chrome IndexedDB file, the kit scripts and the offline checks |
+| `pnpm test` | Unit tests, upstream fixtures, a real Chrome IndexedDB file, the kit scripts and the offline checks |
 | `pnpm build` | Builds `dist/vault-recovery.html` and `dist/vault-recovery.mjs` |
 | `pnpm audit:offline <folder>` | Checks that the built files cannot reach the network |
 | `pnpm release` | Assembles `release/metamask-vault-recovery-v<version>/` from a clean commit |
 | `pnpm verify-release <folder>` | Checks a release against `SHA256SUMS` and rebuilds it to compare every byte |
 
-The project has three runtime dependencies, `@noble/curves`, `@noble/hashes` and `@scure/bip32`, which only add
-`@scure/base`. All four come from the same author and are independently audited (see their READMEs). Decryption
-itself uses the browser's or Node.js's built-in WebCrypto. pnpm is configured to install only versions published
-at least 7 days ago and to run no install scripts ([pnpm-workspace.yaml](pnpm-workspace.yaml)).
+## Dependencies
+
+| Package | Used for |
+| --- | --- |
+| [@noble/curves](https://github.com/paulmillr/noble-curves) | secp256k1 public keys |
+| [@noble/hashes](https://github.com/paulmillr/noble-hashes) | Keccak-256 for addresses |
+| [@scure/bip32](https://github.com/paulmillr/scure-bip32) | HD key derivation ([BIP32](https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki)) |
+| [@scure/base](https://github.com/paulmillr/scure-base) | Pulled in by `@scure/bip32` |
+| [esbuild](https://github.com/evanw/esbuild) | Build only: bundles the page and the CLI |
+
+The four runtime packages come from the same author and are independently audited (see their READMEs).
+Decryption uses the [WebCrypto](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto) built into browsers
+and Node.js. pnpm installs only versions published at least 7 days ago and runs no install scripts
+([pnpm-workspace.yaml](pnpm-workspace.yaml)).
 
 ## Layout
 
@@ -106,6 +119,7 @@ docs/       documentation
 
 ## Credits and license
 
-Test fixtures in `test/fixtures/vault-decryptor` come from
-[MetaMask/vault-decryptor](https://github.com/MetaMask/vault-decryptor) (ISC). This project is released under the
-ISC license, see [LICENSE](LICENSE).
+The vault format is [@metamask/browser-passworder](https://github.com/MetaMask/browser-passworder)'s, and the
+storage layout is [metamask-extension](https://github.com/MetaMask/metamask-extension)'s. Test fixtures in
+`test/fixtures/vault-decryptor` come from [MetaMask/vault-decryptor](https://github.com/MetaMask/vault-decryptor)
+(ISC). This project is released under the ISC license, see [LICENSE](LICENSE).

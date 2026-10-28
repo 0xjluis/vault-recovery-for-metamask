@@ -9,6 +9,7 @@
   --error: #b3261e;
   --ok: #1e7a3c;
   --panel: #f5f6f8;
+  --warning-bg: #fdecea;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -22,6 +23,7 @@
     --error: #ff8a80;
     --ok: #7fd49a;
     --panel: #1f2228;
+    --warning-bg: #3a1f1d;
   }
 }
 
@@ -92,9 +94,27 @@ button.secondary {
   color: var(--accent);
 }
 
-button:disabled {
+button:disabled,
+.button:has(input:disabled),
+.toggle:has(input:disabled) {
   opacity: 0.5;
-  cursor: default;
+  cursor: not-allowed;
+}
+
+.warning {
+  margin: 16px 0;
+  padding: 16px;
+  border: 2px solid var(--error);
+  border-radius: 8px;
+  background: var(--warning-bg);
+}
+
+.warning p {
+  margin: 8px 0 0;
+}
+
+[hidden] {
+  display: none !important;
 }
 
 .button input {

@@ -11,7 +11,13 @@
 <body>
 <main>
   <h1>MetaMask Vault Recovery <span class="muted">v__VERSION__</span></h1>
-  <p class="note">Everything runs on this computer. This page cannot open any network connection: its Content Security Policy blocks them all. Still, disconnect from the internet before typing your password.</p>
+  <p class="note">Everything runs on this computer. This page cannot open any network connection: its Content Security Policy blocks them all. And it only works while this computer is disconnected from every network.</p>
+
+  <div id="network-warning" class="warning" role="alert" hidden>
+    <strong>Disconnect from the network to continue.</strong>
+    <p>This page is locked while your browser reports a network connection. Turn off Wi-Fi, unplug the network cable or switch on airplane mode: the page unlocks by itself.</p>
+    <p id="network-cleared" hidden>A network connection appeared while the page held your data: everything was cleared from it.</p>
+  </div>
 
   <section>
     <h2>1. Files</h2>

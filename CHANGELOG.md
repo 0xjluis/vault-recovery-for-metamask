@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- The web page only works while the computer is disconnected from every network: it starts locked when the browser
+  reports a connection, and drops everything it holds if a connection appears.
+- Documentation covers any recovery scenario, operating system and disk encryption, and links to the projects and
+  standards it relies on.
+
 ## 0.1.0 - 2026-10-28
 
 First release.

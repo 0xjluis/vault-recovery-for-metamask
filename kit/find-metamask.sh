@@ -9,7 +9,7 @@
 #          or ejbalbakoplchlghecdalmeeeajnimhm (Edge Add-ons build).
 #
 # It only reads the source (find, cp and a SHA-256 tool) and never uses the network.
-# Mount the source disk read-only anyway, e.g.: sudo mount -o ro /dev/nvme0n1p3 /mnt/win
+# Mount the source disk read-only anyway, e.g.: sudo mount -o ro /dev/sdX2 /mnt/disk
 #
 # Usage:
 #   find-metamask.sh <search-root>                 List the folders found

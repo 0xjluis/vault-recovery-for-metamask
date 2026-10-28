@@ -48,7 +48,8 @@ and the tag message (`git show v0.1.0`).
 ## 3. The release is built from the source (reproducible build)
 
 This proves the files contain exactly the code in the repository at that tag, nothing added. It needs git,
-Node.js 26 LTS and pnpm 12.14.0:
+[Node.js](https://nodejs.org/) 26 LTS and [pnpm](https://pnpm.io/) 12.14.0. Node.js publishes signed checksums of its
+downloads; the keys are in [nodejs/release-keys](https://github.com/nodejs/release-keys).
 
 ```bash
 git clone <repository url> metamask-vault-recovery

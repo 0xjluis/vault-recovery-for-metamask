@@ -1,121 +1,166 @@
 # Recovery guide
 
-How to get your MetaMask accounts back from a computer that no longer starts, step by step. You need:
+How to get MetaMask's data out of a browser profile and decrypt it. The steps are the same whatever went wrong;
+only the way you reach the files changes.
 
-- The **MetaMask password** you used to unlock the extension on that computer.
-- A **Tails** USB stick (or any Linux live USB), to start the broken computer.
-- A **second USB stick** for the copy.
-- A **release** of this tool, verified as explained in [verifying-a-release.md](verifying-a-release.md).
+## What you need
 
-If the computer still starts, skip to [Step 3](#3-find-and-copy-metamasks-data) and run the kit from there.
+- The **MetaMask password** used in that browser profile. Each profile, and each reinstall, can have its own.
+- A **verified release** of this tool ([verifying-a-release.md](verifying-a-release.md)).
+- A place to copy the data to, such as a USB stick.
+- A computer that you can **disconnect from every network** to decrypt.
 
-## 1. Start the computer from Tails
+Work on a copy, never on the original disk, and keep the original read-only: a damaged disk can get worse with
+every write.
 
-1. Plug the Tails stick and choose it in the boot menu (usually F12, F11, F8 or Esc at power on).
-2. In the Welcome Screen, under **Additional Settings** (`+`), set an **Administration Password**. Tails needs one to
-   open the internal disk; it lasts only for this session.
-3. In **Language & Region**, pick your keyboard layout.
-4. Start Tails. You can leave the network off: nothing below needs it.
+## 1. Reach the browser profile
 
-## 2. Mount the Windows disk read-only
+### Where profiles are
 
-Open a **Terminal** and list the partitions:
+A Chromium browser keeps one folder per profile (`Default`, `Profile 1`, `Profile 2`...) inside its user data
+folder:
+
+| Browser | Windows | macOS | Linux |
+| --- | --- | --- | --- |
+| Chrome | `%LOCALAPPDATA%\Google\Chrome\User Data\` | `~/Library/Application Support/Google/Chrome/` | `~/.config/google-chrome/` |
+| Brave | `%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data\` | `~/Library/Application Support/BraveSoftware/Brave-Browser/` | `~/.config/BraveSoftware/Brave-Browser/` |
+| Edge | `%LOCALAPPDATA%\Microsoft\Edge\User Data\` | `~/Library/Application Support/Microsoft Edge/` | `~/.config/microsoft-edge/` |
+| Chromium | `%LOCALAPPDATA%\Chromium\User Data\` | `~/Library/Application Support/Chromium/` | `~/.config/chromium/` |
+
+`%LOCALAPPDATA%` is `C:\Users\<user>\AppData\Local`. On a disk read from another system, look under `Users/<user>/`
+(Windows, macOS) or `home/<user>/` (Linux). Other Chromium-based browsers follow the same layout under their own
+folder; `find-metamask` finds them all by folder name.
+
+### If the computer starts
+
+Close the browser first (it keeps its database files locked and may write to them), then go to step 2 and run the
+kit on the user's home folder.
+
+### If the computer does not start
+
+Two options:
+
+- **Start it from a live USB system**, which runs from the stick without touching the internal disk.
+  [Tails](https://tails.net/) is designed to leave no trace and to work offline; any Linux live system works too,
+  for example [Ubuntu](https://ubuntu.com/tutorials/try-ubuntu-before-you-install). In Tails, opening the internal
+  disk needs an [administration password](https://tails.net/doc/first_steps/welcome_screen/administration_password/index.en.html)
+  set in the Welcome Screen; see [Accessing the internal hard disk](https://tails.net/doc/advanced_topics/internal_hard_disk/index.en.html).
+- **Move the disk to another computer**, with a USB adapter or enclosure for its type (SATA, NVMe).
+
+### Encrypted disks
+
+You need the disk's own key before anything else:
+
+| Encryption | What unlocks it |
+| --- | --- |
+| BitLocker (Windows) | The recovery key: [Find your BitLocker recovery key](https://support.microsoft.com/en-us/windows/find-your-bitlocker-recovery-key-6b71ad27-0b89-ea08-f143-056f5ab347d6) |
+| FileVault (macOS) | The user's login password or the recovery key: [FileVault](https://support.apple.com/guide/mac-help/protect-data-on-your-mac-with-filevault-mh11785/mac). Usually easiest from another Mac or macOS Recovery |
+| LUKS (Linux) | The passphrase, with [cryptsetup](https://gitlab.com/cryptsetup/cryptsetup) |
+
+### Mount read-only
+
+On Linux, list the partitions with `lsblk -f`, then mount the one that holds the users' folders read-only, for
+example:
 
 ```bash
-lsblk -f
-```
-
-The Windows partition is the large one with `ntfs` as FSTYPE, for example `nvme0n1p3` or `sda3`. If it shows
-`BitLocker`, you need the BitLocker recovery key first (account.microsoft.com/devices/recoverykey).
-
-Mount it read-only (change `nvme0n1p3` to your partition):
-
-```bash
-sudo mkdir -p /mnt/win
+sudo mkdir -p /mnt/disk
 ```
 
 ```bash
-sudo mount -t ntfs-3g -o ro,uid=1000,gid=1000 /dev/nvme0n1p3 /mnt/win
+sudo mount -o ro /dev/sdX2 /mnt/disk
 ```
 
-`ro` means nothing on the disk can change. If Windows was hibernated or used Fast Startup, a read-only mount still
-works. Do not run `ntfsfix` or delete `hiberfil.sys`: both write to the disk.
-
-## 3. Find and copy MetaMask's data
-
-Copy the release folder to the Tails session (for example to `~/Tor Browser/`) and plug the second USB stick; it
-appears under `/media/amnesia/<name>`.
-
-List what the kit finds (this can take a few minutes):
+For a Windows (NTFS) partition use the [ntfs-3g](https://github.com/tuxera/ntfs-3g) driver, which also mounts
+read-only a volume left hibernated by Windows' Fast Startup:
 
 ```bash
-bash find-metamask.sh /mnt/win/Users
+sudo mount -t ntfs-3g -o ro /dev/sdX2 /mnt/disk
 ```
 
-Then copy it to the USB stick:
+Do not run repair tools (`ntfsfix`, `chkdsk`, `fsck`) before you have your copy: they write to the disk.
 
-```bash
-bash find-metamask.sh /mnt/win/Users /media/amnesia/<name>
-```
+## 2. Find and copy MetaMask's data
 
-The kit copies, for every browser profile that had MetaMask (Chrome, Brave, Edge, Chromium...):
+The kit looks for MetaMask's two data folders in every profile under the folder you give it, and copies them:
 
 | Folder | What it holds |
 | --- | --- |
-| `Local Extension Settings/<id>` | MetaMask's storage, with the vault and its older copies |
+| `Local Extension Settings/<id>` | MetaMask's storage: the vault and its older copies |
 | `IndexedDB/chrome-extension_<id>_0.indexeddb.leveldb` | The `metamask-backup` copy of the vault, in recent versions |
 
-It writes them to `metamask-data-<date>/` keeping their original paths, so you can tell which user, browser and
-profile each one comes from. `SHA256SUMS` in that folder holds the hash of every **source** file, and the kit checks
-that the copy matches: the copy is exact even if the disk is failing.
+with `<id>` = `nkbihfbeogaeaoehlefnkodbefgpgknn` (Chrome Web Store build) or `ejbalbakoplchlghecdalmeeeajnimhm`
+(Edge Add-ons build).
 
-On Windows (the disk plugged into another computer), the same with PowerShell:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File find-metamask.ps1 -Root E:\Users -Destination F:\
-```
-
-## 4. Decrypt, offline
-
-Use a computer that is **disconnected from the internet**: the Tails session itself, or another one.
-
-**With the web page**: open `vault-recovery.html` in Chrome, Edge, Brave or Firefox, click **Choose folder**, pick
-`metamask-data-<date>`, type the password, click **Decrypt**.
-
-- In Tails, Tor Browser can only open files inside `~/Tor Browser/`: copy the release and the `metamask-data`
-  folder there first. This combination has not been tested yet; if the page does not load, use another computer.
-
-**With the command line** (Node.js 26.12.1 or later):
+Linux, macOS and live systems:
 
 ```bash
-node vault-recovery.mjs metamask-data-<date>
+bash find-metamask.sh /mnt/disk/Users
+```
+
+```bash
+bash find-metamask.sh /mnt/disk/Users /media/<usb stick>
+```
+
+Windows:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File find-metamask.ps1 -Root D:\Users
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File find-metamask.ps1 -Root D:\Users -Destination E:\
+```
+
+Without a destination the kit only lists what it finds. With one, it writes `metamask-data-<date>/`:
+
+- the folders keep their original paths, so you can tell which user, browser and profile each comes from;
+- `SHA256SUMS` lists the hash of every **source** file, and the kit checks the copy against it, so the copy is
+  exact even from a failing disk.
+
+Searching a whole disk takes a few minutes; start from the users' folder when you can. Copying by hand works too:
+copy the two folders above for each profile.
+
+## 3. Decrypt, offline
+
+On a computer **disconnected from every network** (Wi-Fi off, cable unplugged, or airplane mode):
+
+**Web page**: open `vault-recovery.html` in a current browser, click **Choose folder**, pick the copied folder,
+type the password, click **Decrypt**. The page is locked while the browser reports a network connection, and if a
+connection appears it clears everything it holds.
+
+**Command line** ([Node.js](https://nodejs.org/) 26.12.1 or later):
+
+```bash
+node vault-recovery.mjs <copied folder>
 ```
 
 Both tools:
 
-- Show every distinct vault found, newest first, and where each one was found.
-- Ask for another password when some vaults do not open with the first one (each profile can have its own).
-- Show the addresses first. The secret recovery phrase and the private keys appear only when you tick
-  **Show the secret recovery phrase and the private keys** in the page, or add `--show-secrets` to the command.
-- Group older copies that hold the same accounts as "Same contents as vault N".
+- show every distinct vault, newest first, and where each one was found;
+- ask for another password when some vaults do not open with the first one;
+- show the addresses first; the secret recovery phrase and the private keys appear only when you tick **Show the
+  secret recovery phrase and the private keys** in the page, or add `--show-secrets` to the command;
+- mark older copies that hold the same accounts as "Same contents as vault N".
 
-Accounts of type **Simple Key Pair** are the ones imported with a private key: the recovery phrase does not bring
-them back, so write their private keys down.
+| Keyring shown | What it is | What to keep |
+| --- | --- | --- |
+| HD Key Tree | Accounts created in MetaMask | The secret recovery phrase |
+| Simple Key Pair | Accounts imported with a private key | Each private key: the phrase does not restore them |
+| Ledger, Trezor, QR, Snap... | Hardware or external accounts | Nothing: only addresses are in the vault |
 
-## 5. Finish
+## 4. Restore and clean up
 
-1. Write the phrase and the imported private keys on paper or in a password manager.
+1. Write the phrase and the imported private keys down, on paper or in a password manager.
 2. In a fresh MetaMask, **Import an existing wallet** with the phrase, then **Add account > Import account** with
-   each private key. Check that the addresses match.
-3. Delete `metamask-data-<date>` from the USB stick, and from any other place you copied it to: with the password,
-   it gives access to everything.
-4. If the phrase or keys were shown on a computer you do not trust, create a new wallet and move the funds.
+   each private key, and check that the addresses match.
+3. Delete every copy of the data folders: with the password, they give access to everything.
+4. If the secrets were shown on a computer you do not trust, create a new wallet and move the funds to it.
 
-## If nothing is found
+## Troubleshooting
 
-- The kit finds no folder: search a wider root (`/mnt/win` instead of `/mnt/win/Users`), and check the browser.
-  Firefox keeps extension data in a different format that this tool does not read yet.
-- A vault is found but no password opens it: it may come from another profile or an older installation with
-  another password. Every vault is independent; try the passwords you may have used.
-- The page or CLI reports files "scanned as raw bytes": those files are damaged. Vaults are still searched in them,
-  but older copies may be lost.
+| Problem | What to check |
+| --- | --- |
+| The kit finds nothing | Search a wider folder (the whole disk), check the user and browser. Firefox keeps extension data in a different format that this tool does not read yet |
+| A vault does not open with any password | It may come from another profile or an older installation with another password. Every vault is independent |
+| Files are reported as "scanned as raw bytes" | They are damaged. Vaults are still searched in them, but some older copies may be lost |
+| The page stays locked offline | The browser still reports a connection, often because of a virtual network adapter (VPN, virtual machines, WSL). Disable it, or use the command-line tool |

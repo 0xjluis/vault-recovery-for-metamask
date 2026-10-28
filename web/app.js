@@ -1,4 +1,6 @@
 // Single-page UI over the shared core. Everything stays in memory; nothing is stored or sent.
+// The page only works while the browser reports no network connection: it starts locked when
+// online, and if a connection appears it drops everything it holds and locks again.
 
 import { decryptVault, describeKeyrings, findVaults, groupSources } from '../src/index.js'
 
@@ -10,6 +12,9 @@ const $ = id => document.getElementById(id)
 
 /** @type {any[]} */
 let entries = []
+let decrypting = false
+// Bumped by clearAll(), so that a scan or decryption in progress drops its results
+let generation = 0
 
 /**
  * Creates an element with text content only: file contents never become HTML.
@@ -39,13 +44,64 @@ function describeSource ({ file, key, minSequence, maxSequence, count }) {
     : `${file} · key ${key} · sequences ${minSequence}-${maxSequence} (${count} copies)`
 }
 
+// navigator.onLine is false only when the computer has no active network connection
+function isOnline () {
+  return navigator.onLine
+}
+
+function updateControls () {
+  const online = isOnline()
+  $('network-warning').hidden = !online
+  for (const id of ['folder', 'files', 'show-secrets']) {
+    $(id).disabled = online
+  }
+  $('password').disabled = online || !entries.length
+  $('decrypt').disabled = online || !entries.length || decrypting
+}
+
+function clearAll () {
+  generation++
+  entries = []
+  decrypting = false
+  for (const id of ['folder', 'files', 'password']) {
+    $(id).value = ''
+  }
+  $('show-secrets').checked = false
+  for (const id of ['scan-status', 'decrypt-status']) {
+    $(id).textContent = ''
+  }
+  $('vault-list').replaceChildren()
+  renderResults()
+  updateControls()
+}
+
+function onNetworkChange () {
+  if (isOnline()) {
+    // The notice stays until the network goes away, even if this runs again with nothing left
+    if (entries.length > 0 || decrypting) {
+      $('network-cleared').hidden = false
+    }
+    clearAll()
+  } else {
+    $('network-cleared').hidden = true
+    updateControls()
+  }
+}
+
 async function scan (fileList, onlyLevelDB) {
+  if (isOnline()) {
+    return
+  }
+  const started = generation
   const selected = [...fileList].filter(file => !onlyLevelDB || LEVELDB_FILE.test(file.name))
   $('scan-status').textContent = `Reading ${selected.length} file(s)…`
   const files = await Promise.all(selected.map(async file => ({
     name: file.webkitRelativePath || file.name,
     bytes: new Uint8Array(await file.arrayBuffer()),
   })))
+  if (started !== generation || isOnline()) {
+    return
+  }
   const { vaults, errors } = findVaults(files)
   entries = vaults.map(found => ({ ...found, error: NOT_TRIED }))
 
@@ -59,21 +115,37 @@ async function scan (fileList, onlyLevelDB) {
     }
     return item
   }))
-  $('password').disabled = !vaults.length
-  $('decrypt').disabled = !vaults.length
+  updateControls()
   renderResults()
 }
 
 async function decrypt (password) {
+  if (isOnline()) {
+    return
+  }
+  const started = generation
   const pending = entries.filter(entry => entry.error === NOT_TRIED || entry.error === WRONG_PASSWORD)
   $('decrypt-status').textContent = `Decrypting ${pending.length} vault(s)…`
-  $('decrypt').disabled = true
+  decrypting = true
+  updateControls()
   for (const entry of pending) {
+    let keyrings
+    let error
     try {
-      entry.keyrings = await describeKeyrings(await decryptVault(entry.vault, password))
-      delete entry.error
+      keyrings = await describeKeyrings(await decryptVault(entry.vault, password))
     } catch (err) {
-      entry.error = err.message === 'Incorrect password' ? WRONG_PASSWORD : err.message
+      error = err.message === 'Incorrect password' ? WRONG_PASSWORD : err.message
+    }
+    // A connection appeared or the page was cleared meanwhile: keep nothing
+    if (started !== generation || isOnline()) {
+      onNetworkChange()
+      return
+    }
+    if (keyrings) {
+      entry.keyrings = keyrings
+      delete entry.error
+    } else {
+      entry.error = error
     }
   }
 
@@ -96,12 +168,13 @@ async function decrypt (password) {
   $('decrypt-status').textContent = failed
     ? `${entries.length - failed} decrypted, ${failed} left: try another password.`
     : 'All vaults decrypted.'
-  $('decrypt').disabled = false
+  decrypting = false
+  updateControls()
   renderResults()
 }
 
 function renderResults () {
-  const showSecrets = $('show-secrets').checked
+  const showSecrets = $('show-secrets').checked && !isOnline()
   $('results').replaceChildren(...entries.map((entry, index) => {
     const card = el('div', 'vault')
     card.append(el('h3', '', `Vault ${index + 1}`))
@@ -148,17 +221,7 @@ $('password-form').addEventListener('submit', event => {
     decrypt(password)
   }
 })
-$('clear').addEventListener('click', () => {
-  entries = []
-  for (const id of ['folder', 'files', 'password']) {
-    $(id).value = ''
-  }
-  $('show-secrets').checked = false
-  for (const id of ['scan-status', 'decrypt-status']) {
-    $(id).textContent = ''
-  }
-  $('vault-list').replaceChildren()
-  $('password').disabled = true
-  $('decrypt').disabled = true
-  renderResults()
-})
+$('clear').addEventListener('click', clearAll)
+window.addEventListener('online', onNetworkChange)
+window.addEventListener('offline', onNetworkChange)
+updateControls()

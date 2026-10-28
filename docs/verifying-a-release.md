@@ -43,7 +43,7 @@ Get-FileHash SHA256SUMS -Algorithm SHA256
 ```
 
 Get the published value from a different channel than the download if you can, for example the repository page
-and the tag message (`git show v0.1.0`).
+and the tag message (`git show v<version>`, for example `git show v0.2.0`).
 
 ## 3. The release is built from the source (reproducible build)
 
@@ -60,7 +60,7 @@ cd metamask-vault-recovery
 ```
 
 ```bash
-git checkout v0.1.0
+git checkout v<version>
 ```
 
 ```bash

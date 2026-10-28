@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 - 2026-10-28
 
 - The web page only works while the computer is disconnected from every network: it starts locked when the browser
   reports a connection, and drops everything it holds if a connection appears.

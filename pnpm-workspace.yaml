@@ -1,0 +1,11 @@
+# Supply-chain hardening, see https://pnpm.io/settings
+# Only install versions published at least 7 days ago (minutes)
+minimumReleaseAge: 10080
+# Fail if a package's publishing trust level drops compared to previous versions
+trustPolicy: no-downgrade
+# Refuse to install with a Node.js outside package.json's engines (current LTS, patched)
+engineStrict: true
+# Dependency install scripts never run unless listed here
+strictDepBuilds: true
+allowBuilds:
+  esbuild: false

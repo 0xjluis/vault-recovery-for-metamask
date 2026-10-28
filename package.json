@@ -1,0 +1,30 @@
+{
+  "name": "metamask-vault-recovery",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Recover MetaMask vaults from a browser profile, offline: CLI and single-file web page",
+  "license": "ISC",
+  "type": "module",
+  "bin": {
+    "vault-recovery": "./cli/vault-recovery.js"
+  },
+  "scripts": {
+    "build": "node scripts/build.js",
+    "test": "node --test",
+    "audit:offline": "node scripts/audit-offline.js",
+    "release": "node scripts/release.js",
+    "verify-release": "node scripts/verify-release.js"
+  },
+  "engines": {
+    "node": ">=26.12.1"
+  },
+  "packageManager": "pnpm@12.14.0",
+  "dependencies": {
+    "@noble/curves": "2.4.0",
+    "@noble/hashes": "2.4.0",
+    "@scure/bip32": "2.4.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

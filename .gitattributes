@@ -1,0 +1,6 @@
+# LF everywhere, on every OS: release files are compared byte by byte
+* text=auto eol=lf
+
+# Browser data used as test fixtures
+*.ldb binary
+*.log binary

@@ -1,0 +1,161 @@
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --text: #1d1d1f;
+  --muted: #5f6368;
+  --border: #d5d7db;
+  --accent: #1a5fd0;
+  --accent-text: #ffffff;
+  --error: #b3261e;
+  --ok: #1e7a3c;
+  --panel: #f5f6f8;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16181c;
+    --text: #e8eaed;
+    --muted: #a0a4ab;
+    --border: #3a3e45;
+    --accent: #7aa7ff;
+    --accent-text: #0d1117;
+    --error: #ff8a80;
+    --ok: #7fd49a;
+    --panel: #1f2228;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+main {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+}
+
+h1 {
+  font-size: 1.6rem;
+  margin: 0 0 8px;
+}
+
+h2 {
+  font-size: 1.15rem;
+  margin: 32px 0 8px;
+}
+
+code,
+.mono {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+
+.note {
+  color: var(--muted);
+}
+
+.paths {
+  padding-left: 20px;
+}
+
+.actions,
+form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.button,
+button {
+  display: inline-block;
+  padding: 8px 16px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.button.secondary,
+button.secondary {
+  background: transparent;
+  color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.button input {
+  display: none;
+}
+
+input[type="password"] {
+  flex: 1 1 240px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.toggle {
+  display: block;
+  margin-bottom: 16px;
+}
+
+.vault {
+  margin: 16px 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.vault h3 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+}
+
+.source,
+.muted {
+  color: var(--muted);
+  font-size: 0.9em;
+}
+
+.error {
+  color: var(--error);
+}
+
+.ok {
+  color: var(--ok);
+}
+
+.keyring {
+  margin-top: 12px;
+}
+
+.account {
+  margin: 4px 0 4px 16px;
+}
+
+.secret {
+  margin: 2px 0 2px 16px;
+  color: var(--error);
+}
+
+#clear {
+  margin-top: 24px;
+}

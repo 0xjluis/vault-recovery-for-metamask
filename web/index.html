@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="__CSP__">
+<meta name="referrer" content="no-referrer">
+<title>MetaMask Vault Recovery</title>
+<style>__STYLE__</style>
+</head>
+<body>
+<main>
+  <h1>MetaMask Vault Recovery <span class="muted">v__VERSION__</span></h1>
+  <p class="note">Everything runs on this computer. This page cannot open any network connection: its Content Security Policy blocks them all. Still, disconnect from the internet before typing your password.</p>
+
+  <section>
+    <h2>1. Files</h2>
+    <p>Choose the MetaMask folder of a browser profile, or the whole profile. Only <code>.ldb</code> and <code>.log</code> files are read from folders:</p>
+    <ul class="paths">
+      <li><code>Local Extension Settings/nkbihfbeogaeaoehlefnkodbefgpgknn</code></li>
+      <li><code>IndexedDB/chrome-extension_nkbihfbeogaeaoehlefnkodbefgpgknn_0.indexeddb.leveldb</code></li>
+      <li>Edge: the same folders with <code>ejbalbakoplchlghecdalmeeeajnimhm</code></li>
+    </ul>
+    <div class="actions">
+      <label class="button">Choose folder<input id="folder" type="file" webkitdirectory multiple></label>
+      <label class="button secondary">Choose files<input id="files" type="file" multiple></label>
+    </div>
+    <p id="scan-status" role="status"></p>
+    <ol id="vault-list"></ol>
+  </section>
+
+  <section>
+    <h2>2. Password</h2>
+    <form id="password-form" autocomplete="off">
+      <input id="password" type="password" placeholder="MetaMask password" disabled>
+      <button id="decrypt" type="submit" disabled>Decrypt</button>
+    </form>
+    <p id="decrypt-status" role="status"></p>
+  </section>
+
+  <section>
+    <h2>3. Accounts</h2>
+    <label class="toggle"><input id="show-secrets" type="checkbox" autocomplete="off"> Show the secret recovery phrase and the private keys</label>
+    <div id="results"></div>
+    <button id="clear" type="button" class="secondary">Clear everything from this page</button>
+  </section>
+</main>
+<script>__SCRIPT__</script>
+</body>
+</html>

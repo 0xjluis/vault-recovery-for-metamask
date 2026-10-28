@@ -43,7 +43,18 @@ Get-FileHash SHA256SUMS -Algorithm SHA256
 ```
 
 Get the published value from a different channel than the download if you can, for example the repository page
-and the tag message (`git show v<version>`, for example `git show v0.2.0`).
+and the tag message (`git show v<version>`, for example `git show v0.3.0`).
+
+Tags and commits are signed with the maintainer's SSH key. Check the tag's signature from a clone of the repository:
+
+```bash
+git -c gpg.ssh.allowedSignersFile=.github/allowed_signers tag -v v<version>
+```
+
+It must print `Good "git" signature for 27089707+0xjluis@users.noreply.github.com with ED25519 key
+SHA256:lbz25JepdbVPhbBtAfT08husAFZMmw4VppPnnLsYMV4`. `.github/allowed_signers` comes from the repository itself,
+so also check that this key is the one the maintainer's GitHub account lists as a signing key
+(`https://api.github.com/users/0xjluis/ssh_signing_keys`); GitHub then shows the tag and the commits as **Verified**.
 
 ## 3. The release is built from the source (reproducible build)
 
@@ -52,11 +63,11 @@ This proves the files contain exactly the code in the repository at that tag, no
 downloads; the keys are in [nodejs/release-keys](https://github.com/nodejs/release-keys).
 
 ```bash
-git clone <repository url> metamask-vault-recovery
+git clone <repository url> vault-recovery-for-metamask
 ```
 
 ```bash
-cd metamask-vault-recovery
+cd vault-recovery-for-metamask
 ```
 
 ```bash

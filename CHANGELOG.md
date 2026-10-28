@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0 - 2026-10-28
+
+- Renamed to Vault Recovery for MetaMask (`vault-recovery-for-metamask`), with a notice that the project is not
+  affiliated with MetaMask or Consensys.
+- README section on avoiding scams, `SECURITY.md` with private vulnerability reporting, and an issue template that
+  warns against sharing secrets. `SECURITY.md` ships with the release.
+- `docs/releasing.md`: how maintainers publish and sign a release.
+- Commits and tags are signed with SSH; `.github/allowed_signers` holds the key to verify them.
+
 ## 0.2.0 - 2026-10-28
 
 - The web page only works while the computer is disconnected from every network: it starts locked when the browser

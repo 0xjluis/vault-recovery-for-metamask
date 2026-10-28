@@ -1,4 +1,4 @@
-// Assembles release/metamask-vault-recovery-v<version>/ from a clean git checkout:
+// Assembles release/vault-recovery-for-metamask-v<version>/ from a clean git checkout:
 // the two built files, the kit scripts, the docs, BUILD-INFO.txt and a SHA256SUMS file.
 // The build is reproducible: scripts/verify-release.js rebuilds it and compares every byte.
 // Usage: node scripts/release.js [--allow-dirty]
@@ -20,6 +20,7 @@ const COPIED = {
   'find-metamask.ps1': 'kit/find-metamask.ps1',
   'README.md': 'README.md',
   'CHANGELOG.md': 'CHANGELOG.md',
+  'SECURITY.md': 'SECURITY.md',
   LICENSE: 'LICENSE',
   'docs/recovery-guide.md': 'docs/recovery-guide.md',
   'docs/security.md': 'docs/security.md',
@@ -27,7 +28,7 @@ const COPIED = {
   'docs/verifying-a-release.md': 'docs/verifying-a-release.md',
 }
 
-export const RELEASE_NAME = `metamask-vault-recovery-v${VERSION}`
+export const RELEASE_NAME = `vault-recovery-for-metamask-v${VERSION}`
 
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex')
 
@@ -77,7 +78,7 @@ export async function assembleRelease (dir) {
   }
   const esbuildVersion = JSON.parse(readFileSync(join(ROOT, 'node_modules/esbuild/package.json'), 'utf8')).version
   writeFileSync(join(dir, 'BUILD-INFO.txt'), [
-    `name: metamask-vault-recovery`,
+    `name: vault-recovery-for-metamask`,
     `version: ${VERSION}`,
     `git commit: ${git('rev-parse', 'HEAD')}`,
     `pnpm-lock.yaml sha256: ${sha256(readFileSync(join(ROOT, 'pnpm-lock.yaml')))}`,

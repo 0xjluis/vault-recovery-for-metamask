@@ -85,8 +85,9 @@ give the same bytes. [verifying-a-release.md](verifying-a-release.md) explains t
 2. The hash of `SHA256SUMS` matches the one published with the release: the list itself was not replaced.
 3. Rebuilding from the tagged source gives the same files: they contain exactly that source code.
 
-Releases are not signed yet. Until they are, the published hash of `SHA256SUMS` and the reproducible build are what
-tie a download to this repository.
+Commits and release tags are signed with the maintainer's SSH key, whose public key is in `.github/allowed_signers`
+and in the maintainer's GitHub account; GitHub shows them as **Verified**. The signature ties the tag, and the
+`SHA256SUMS` hash in its message, to that key; the reproducible build ties the files to the source.
 
 ## What it does not protect against
 
@@ -99,5 +100,5 @@ tie a download to this repository.
 
 ## Reporting a problem
 
-Open an issue without including any vault, file or secret. For a vulnerability, contact the maintainers privately
-first.
+Bugs: open an issue, without any vault, file or secret. Vulnerabilities: report them privately as described in
+[SECURITY.md](../SECURITY.md), which also lists what the maintainers will never ask for.

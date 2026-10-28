@@ -1,4 +1,7 @@
-# MetaMask Vault Recovery
+# Vault Recovery for MetaMask
+
+> **Not affiliated with MetaMask or Consensys.** This is an independent, community tool. MetaMask is a trademark of
+> its owners. MetaMask's own tool, [vault-decryptor](https://github.com/MetaMask/vault-decryptor), is compared below.
 
 Offline tools to recover the accounts of a [MetaMask](https://github.com/MetaMask/metamask-extension) browser
 extension from the files it keeps in a Chromium browser profile: the secret recovery phrase, the addresses and the
@@ -18,6 +21,21 @@ Nothing here connects to the internet. The web page's Content Security Policy bl
 the page refuses to work while the computer is connected to a network; the command-line tool only reads the files
 you give it. Both are checked for this on every build ([docs/security.md](docs/security.md)).
 
+## Stay safe
+
+Wallet recovery attracts scammers. Before you start:
+
+- **Nobody needs your secret recovery phrase, private keys, password or vault files** to help you: not the authors
+  of this tool, not MetaMask support, not anyone offering "recovery services". Whoever asks for them wants your
+  funds.
+- **The maintainers never contact you first** and never offer help by direct message. Messages, comments or support
+  sites that say otherwise are impersonations.
+- **Only use releases from this repository**, and [verify them](docs/verifying-a-release.md) before running them.
+  Copies of recovery tools that steal keys are common; a verified release matches the published `SHA256SUMS`.
+- **Decrypt on a computer disconnected from every network**, and delete the copied files when you are done.
+- **Never paste vaults, files, passwords or secrets into an issue.** Security problems go through
+  [SECURITY.md](SECURITY.md).
+
 ## What a release contains
 
 | File | What it is |
@@ -27,6 +45,7 @@ you give it. Both are checked for this on every build ([docs/security.md](docs/s
 | `find-metamask.sh` | Finds and copies MetaMask's data folders from a disk or a folder (Linux, macOS, live systems such as [Tails](https://tails.net/)) |
 | `find-metamask.ps1` | The same for Windows PowerShell |
 | `docs/` | Recovery guide, security model, how it works, how to verify a release |
+| `SECURITY.md` | How to report a vulnerability, and what the maintainers will never ask for |
 | `BUILD-INFO.txt` | Git commit and toolchain the release was built from |
 | `SHA256SUMS` | SHA-256 of every file above |
 
@@ -87,8 +106,10 @@ pnpm build
 | `pnpm test` | Unit tests, upstream fixtures, a real Chrome IndexedDB file, the kit scripts and the offline checks |
 | `pnpm build` | Builds `dist/vault-recovery.html` and `dist/vault-recovery.mjs` |
 | `pnpm audit:offline <folder>` | Checks that the built files cannot reach the network |
-| `pnpm release` | Assembles `release/metamask-vault-recovery-v<version>/` from a clean commit |
+| `pnpm release` | Assembles `release/vault-recovery-for-metamask-v<version>/` from a clean commit |
 | `pnpm verify-release <folder>` | Checks a release against `SHA256SUMS` and rebuilds it to compare every byte |
+
+Maintainers: how to publish a release is in [docs/releasing.md](docs/releasing.md).
 
 ## Dependencies
 

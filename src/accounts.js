@@ -21,6 +21,7 @@ const decoder = new TextDecoder()
  * @property {string} type - Keyring type, e.g. 'HD Key Tree' or 'Simple Key Pair'.
  * @property {string} [mnemonic] - Secret recovery phrase, for HD keyrings.
  * @property {Account[]} accounts
+ * @property {string} [error] - Why the keyring could not be read; the others still are.
  */
 
 function toHex (bytes) {
@@ -88,29 +89,35 @@ export async function mnemonicToSeed (mnemonic) {
 export async function describeKeyrings (keyrings) {
   const summaries = []
   for (const { type, data } of keyrings) {
-    if (type === 'HD Key Tree') {
-      const mnemonic = decodeMnemonic(data.mnemonic).trim()
-      const root = HDKey.fromMasterSeed(await mnemonicToSeed(mnemonic))
-      const hdPath = data.hdPath ?? DEFAULT_HD_PATH
-      const accounts = []
-      for (let i = 0; i < (data.numberOfAccounts ?? 1); i++) {
-        const path = `${hdPath}/${i}`
-        const privateKey = root.derive(path).privateKey
-        accounts.push({ path, address: privateKeyToAddress(privateKey), privateKey: `0x${toHex(privateKey)}` })
+    // One damaged keyring must not hide the others, e.g. the phrase of the HD keyring.
+    // The message is fixed: an error could quote part of a key
+    try {
+      if (type === 'HD Key Tree') {
+        const mnemonic = decodeMnemonic(data.mnemonic).trim()
+        const root = HDKey.fromMasterSeed(await mnemonicToSeed(mnemonic))
+        const hdPath = data.hdPath ?? DEFAULT_HD_PATH
+        const accounts = []
+        for (let i = 0; i < (data.numberOfAccounts ?? 1); i++) {
+          const path = `${hdPath}/${i}`
+          const privateKey = root.derive(path).privateKey
+          accounts.push({ path, address: privateKeyToAddress(privateKey), privateKey: `0x${toHex(privateKey)}` })
+        }
+        summaries.push({ type, mnemonic, accounts })
+      } else if (type === 'Simple Key Pair') {
+        summaries.push({
+          type,
+          accounts: data.map(key => {
+            const privateKey = hexToBytes(key)
+            return { address: privateKeyToAddress(privateKey), privateKey: `0x${toHex(privateKey)}` }
+          }),
+        })
+      } else {
+        // Hardware and other keyrings only keep addresses, the keys live elsewhere
+        const addresses = Array.isArray(data?.accounts) ? data.accounts.filter(a => typeof a === 'string') : []
+        summaries.push({ type, accounts: addresses.map(address => ({ address })) })
       }
-      summaries.push({ type, mnemonic, accounts })
-    } else if (type === 'Simple Key Pair') {
-      summaries.push({
-        type,
-        accounts: data.map(key => {
-          const privateKey = hexToBytes(key)
-          return { address: privateKeyToAddress(privateKey), privateKey: `0x${toHex(privateKey)}` }
-        }),
-      })
-    } else {
-      // Hardware and other keyrings only keep addresses, the keys live elsewhere
-      const addresses = Array.isArray(data?.accounts) ? data.accounts.filter(a => typeof a === 'string') : []
-      summaries.push({ type, accounts: addresses.map(address => ({ address })) })
+    } catch (err) {
+      summaries.push({ type, accounts: [], error: 'damaged keyring, could not be read' })
     }
   }
   return summaries

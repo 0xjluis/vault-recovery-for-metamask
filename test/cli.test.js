@@ -38,6 +38,12 @@ test('prints secrets in JSON only with --show-secrets', () => {
   const [entry] = JSON.parse(stdout)
   assert.equal(entry.keyrings[0].mnemonic, HARDHAT.mnemonic)
   assert.equal(entry.keyrings[1].accounts[0].privateKey, HARDHAT.imported.privateKey)
+  assert.equal(entry.vault.data, vault.data)
+
+  // The encrypted vault is enough to try passwords offline: not in output without secrets
+  const [plain] = JSON.parse(run(['--json', dir], 'right\n').stdout)
+  assert.equal(plain.keyrings[0].mnemonic, undefined)
+  assert.equal(plain.vault, undefined)
 })
 
 test('shows control characters from the files as ? and marks vaults found elsewhere', async t => {

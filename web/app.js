@@ -52,9 +52,11 @@ function isOnline () {
 function updateControls () {
   const online = isOnline()
   $('network-warning').hidden = !online
-  for (const id of ['folder', 'files', 'show-secrets']) {
-    $(id).disabled = online
+  // No new files while decrypting: the results would belong to the previous ones
+  for (const id of ['folder', 'files']) {
+    $(id).disabled = online || decrypting
   }
+  $('show-secrets').disabled = online
   $('password').disabled = online || !entries.length
   $('decrypt').disabled = online || !entries.length || decrypting
 }
@@ -92,13 +94,29 @@ async function scan (fileList, onlyLevelDB) {
   if (isOnline()) {
     return
   }
-  const started = generation
+  // Nothing from the previous files stays on the page, even if these cannot be read:
+  // their accounts would look like the new folder's
+  const started = ++generation
+  entries = []
+  $('show-secrets').checked = false
+  $('decrypt-status').textContent = ''
+  $('vault-list').replaceChildren()
+  renderResults()
+  updateControls()
   const selected = [...fileList].filter(file => !onlyLevelDB || LEVELDB_FILE.test(file.name))
   $('scan-status').textContent = `Reading ${selected.length} file(s)…`
-  const files = await Promise.all(selected.map(async file => ({
-    name: file.webkitRelativePath || file.name,
-    bytes: new Uint8Array(await file.arrayBuffer()),
-  })))
+  let files
+  try {
+    files = await Promise.all(selected.map(async file => ({
+      name: file.webkitRelativePath || file.name,
+      bytes: new Uint8Array(await file.arrayBuffer()),
+    })))
+  } catch (err) {
+    if (started === generation) {
+      $('scan-status').textContent = 'Some files could not be read, for example because a browser is using them. Close it, or copy the folder first, and choose it again.'
+    }
+    return
+  }
   if (started !== generation || isOnline()) {
     return
   }
@@ -207,7 +225,9 @@ function renderResults () {
           block.append(el('div', 'secret mono', `Private key: ${account.privateKey}`))
         }
       }
-      if (!keyring.accounts.length) {
+      if (keyring.error) {
+        block.append(el('div', 'error', `Not read: ${keyring.error}`))
+      } else if (!keyring.accounts.length) {
         block.append(el('div', 'account muted', 'No accounts'))
       }
       card.append(block)

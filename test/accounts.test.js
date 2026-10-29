@@ -29,6 +29,17 @@ test('derives HD accounts and imported accounts', async () => {
   ])
 })
 
+test('a damaged keyring does not hide the others', async () => {
+  const [hd, imported, broken] = await describeKeyrings([
+    { type: 'HD Key Tree', data: { mnemonic: HARDHAT.mnemonic, numberOfAccounts: 1 } },
+    { type: 'Simple Key Pair', data: ['not a key'] },
+    { type: 'HD Key Tree', data: null },
+  ])
+  assert.equal(hd.mnemonic, HARDHAT.mnemonic)
+  assert.deepEqual(imported, { type: 'Simple Key Pair', accounts: [], error: 'damaged keyring, could not be read' })
+  assert.deepEqual(broken, { type: 'HD Key Tree', accounts: [], error: 'damaged keyring, could not be read' })
+})
+
 test('decodes a phrase stored as UTF-8 bytes', () => {
   const bytes = [...new TextEncoder().encode(HARDHAT.mnemonic)]
   assert.equal(decodeMnemonic(bytes), HARDHAT.mnemonic)

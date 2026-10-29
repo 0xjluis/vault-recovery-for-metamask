@@ -29,7 +29,7 @@ whole profile: websites can write files there that look like a vault.
 
 Options:
   --show-secrets  Print the secret recovery phrase and the private keys
-  --json          JSON output (secrets only with --show-secrets)
+  --json          JSON output (secrets and the encrypted vault only with --show-secrets)
   -v, --version   Print the version
   -h, --help      Print this help
 `
@@ -189,7 +189,9 @@ function printVault (index, entry, showSecrets) {
         console.log(`      Private key: ${account.privateKey}`)
       }
     }
-    if (!keyring.accounts.length) {
+    if (keyring.error) {
+      console.log(`    Not read: ${keyring.error}`)
+    } else if (!keyring.accounts.length) {
       console.log('    (no accounts)')
     }
   }
@@ -197,7 +199,9 @@ function printVault (index, entry, showSecrets) {
 
 function toJson (entries, showSecrets) {
   return entries.map(({ vault, sources, inKeyringController, error, sameAs, keyrings }) => ({
-    vault,
+    // With the encrypted vault, anyone can try passwords offline: output shared as
+    // "without secrets" must not include it
+    ...(showSecrets ? { vault } : {}),
     sources,
     inKeyringController,
     error,

@@ -94,6 +94,38 @@ export function makeLogFile (batches) {
   return Uint8Array.from(out)
 }
 
+/**
+ * Builds a LevelDB table (`.ldb`) with uncompressed blocks. Checksums are left as zero.
+ *
+ * @param {{key: string, sequence: number, value: string}[][]} blocks - Entries of each data block.
+ * @param {number[]} [index] - Data block of each index entry: every block once by default.
+ * @returns {Uint8Array} File contents.
+ */
+export function makeTableFile (blocks, index = blocks.map((_, i) => i)) {
+  const out = []
+  // Entries without shared key prefixes and a single restart point; returns its handle
+  const addBlock = entries => {
+    const bytes = []
+    for (const { key, value } of entries) {
+      bytes.push(0, ...varint(key.length), ...varint(value.length), ...key, ...value)
+    }
+    bytes.push(0, 0, 0, 0, 1, 0, 0, 0)
+    const handle = [...varint(out.length), ...varint(bytes.length)]
+    out.push(...bytes, 0, 0, 0, 0, 0)
+    return handle
+  }
+  const handles = blocks.map(entries => addBlock(entries.map(({ key, sequence, value }) => ({
+    // Internal key: user key + 8 bytes of (sequence << 8 | 1), 1 being a Put
+    key: [...toBytes(key), ...Array.from({ length: 8 }, (_, i) => Math.floor((sequence * 256 + 1) / 2 ** (8 * i)) & 0xff)],
+    value: [...toBytes(value)],
+  }))))
+  const indexHandle = addBlock(index.map((block, i) => ({ key: [i], value: handles[block] })))
+  // Footer: metaindex and index handles, padding to 40 bytes, magic number
+  const footer = [0, 0, ...indexHandle]
+  out.push(...footer, ...new Array(40 - footer.length).fill(0), 0x57, 0xfb, 0x80, 0x8b, 0x24, 0x75, 0x47, 0xdb)
+  return Uint8Array.from(out)
+}
+
 // Hardhat's public test mnemonic and its first accounts
 export const HARDHAT = {
   mnemonic: 'test test test test test test test test test test test junk',

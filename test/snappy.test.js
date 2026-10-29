@@ -19,6 +19,11 @@ test('rejects a copy before the start of the output', () => {
   assert.throws(() => snappyUncompress(Uint8Array.from([4, 0x01, 0x05])), /Invalid Snappy copy/)
 })
 
+test('rejects a length that the block cannot expand to, before allocating it', () => {
+  // 1 MiB announced in 5 bytes: more than 22 times the input
+  assert.throws(() => snappyUncompress(Uint8Array.from([0x80, 0x80, 0x40, 0x08, 0x61])), /Snappy block too large/)
+})
+
 test('rejects a truncated block', () => {
   assert.throws(() => snappyUncompress(Uint8Array.from([5, 0x08, 0x61, 0x62, 0x63])), /Truncated Snappy block/)
 })

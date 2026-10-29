@@ -32,6 +32,10 @@ import { readLogFile, readTableFile } from './leveldb.js'
 
 const BASE64 = /^[A-Za-z0-9+/]+=*$/
 const MAX_VAULT_LENGTH = 1 << 20
+// The vault, keyMetadata and its params, plus one level to spare. Deeper objects are not
+// vaults, and stopping there keeps the search linear: without the limit, `{"data":`
+// repeated made every match scan up to MAX_VAULT_LENGTH (hours for a few MB)
+const MAX_VAULT_DEPTH = 4
 // `{"data":` with the same number of backslashes before both quotes (escaping level)
 const VAULT_START = /\{(\\*)"data\1"\s*:/g
 
@@ -59,14 +63,17 @@ export function isVault (value) {
  *
  * @param {string} text - Text to search.
  * @param {number} start - Position of the opening brace.
- * @returns {number} Position of the closing brace, or -1.
+ * @returns {number} Position of the closing brace, or -1 if the object is too long or
+ * too deep for a vault.
  */
 function findObjectEnd (text, start) {
   let depth = 0
   const limit = Math.min(text.length, start + MAX_VAULT_LENGTH)
   for (let i = start; i < limit; i++) {
     if (text[i] === '{') {
-      depth++
+      if (++depth > MAX_VAULT_DEPTH) {
+        return -1
+      }
     } else if (text[i] === '}' && --depth === 0) {
       return i
     }
@@ -127,15 +134,19 @@ export function groupSources (sources) {
   const groups = new Map()
   for (const source of sources) {
     const id = `${source.file}\u0000${source.key}`
-    groups.set(id, [...(groups.get(id) ?? []), source])
+    if (!groups.has(id)) {
+      groups.set(id, [])
+    }
+    groups.get(id).push(source)
   }
   return [...groups.values()].map(group => {
     const sequences = group.map(source => source.sequence).filter(sequence => sequence !== null)
     return {
       file: group[0].file,
       key: group[0].key,
-      minSequence: sequences.length ? Math.min(...sequences) : null,
-      maxSequence: sequences.length ? Math.max(...sequences) : null,
+      // Not Math.min(...sequences): a spread of many copies overflows the stack
+      minSequence: sequences.length ? sequences.reduce((min, sequence) => Math.min(min, sequence)) : null,
+      maxSequence: sequences.length ? sequences.reduce((max, sequence) => Math.max(max, sequence)) : null,
       count: group.length,
     }
   })
@@ -187,10 +198,14 @@ export function findVaults (files) {
   const found = new Map()
   const errors = []
 
+  // A file can hold hundreds of thousands of copies: no search through the sources
+  const seen = new Set()
   const add = (vault, source, inKeyringController) => {
     const id = vaultId(vault)
     const entry = found.get(id) ?? { vault, sources: [], inKeyringController: false }
-    if (!entry.sources.some(s => s.file === source.file && s.key === source.key && s.sequence === source.sequence)) {
+    const sourceId = JSON.stringify([id, source.file, source.key, source.sequence])
+    if (!seen.has(sourceId)) {
+      seen.add(sourceId)
       entry.sources.push(source)
     }
     entry.inKeyringController ||= inKeyringController
@@ -229,7 +244,7 @@ export function findVaults (files) {
     }
   }
 
-  const newest = entry => Math.max(-1, ...entry.sources.map(s => s.sequence ?? -1))
+  const newest = entry => entry.sources.reduce((max, s) => Math.max(max, s.sequence ?? -1), -1)
   return {
     vaults: [...found.values()].sort((a, b) => Number(b.inKeyringController) - Number(a.inKeyringController) || newest(b) - newest(a)),
     errors,

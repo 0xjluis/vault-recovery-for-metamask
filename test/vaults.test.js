@@ -100,6 +100,26 @@ test('tells KeyringController.vault apart from other vaults in the "data" key', 
   assert.deepEqual(vaults.map(v => [v.vault.iv, v.inKeyringController]), [[vault.iv, true], [planted.iv, false]])
 })
 
+test('searches crafted text in linear time', () => {
+  // Every `{"data":` used to be scanned up to 1 MiB ahead: 27 s for this 256 KiB
+  const start = performance.now()
+  assert.deepEqual(findVaultsInText('{"data":'.repeat(1 << 15) + JSON.stringify(vault)), [vault])
+  assert.ok(performance.now() - start < 5000)
+})
+
+test('handles hundreds of thousands of copies of a vault', () => {
+  const value = JSON.stringify({ vault: JSON.stringify(vault) })
+  const file = makeLogFile(Array.from({ length: 1000 }, (_, i) => ({
+    sequence: 1 + i * 200,
+    ops: Array.from({ length: 200 }, () => ({ key: 'KeyringController', value })),
+  })))
+  const { vaults } = findVaults([{ name: '000003.log', bytes: file }])
+  assert.equal(vaults.length, 1)
+  assert.deepEqual(groupSources(vaults[0].sources), [
+    { file: '000003.log', key: 'KeyringController', minSequence: 1, maxSequence: 200000, count: 200000 },
+  ])
+})
+
 test('groups sources by file and key', () => {
   assert.deepEqual(groupSources([
     { file: 'a.log', key: 'data', sequence: 3 },

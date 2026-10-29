@@ -227,9 +227,16 @@ export function readTableFile (bytes) {
   const [indexHandle] = readBlockHandle(footer, afterMetaindex)
 
   const records = []
+  // Data blocks follow each other in the file, in the order of the index. An index that
+  // goes back reuses blocks: that made a 65 KiB file expand to 1.5 GiB, so those are skipped
+  let nextOffset = 0
   for (const { value } of readBlockEntries(readBlock(bytes, indexHandle))) {
     try {
       const [handle] = readBlockHandle(value, 0)
+      if (handle.offset < nextOffset || handle.offset + handle.size + BLOCK_TRAILER_SIZE > bytes.length) {
+        continue
+      }
+      nextOffset = handle.offset + handle.size + BLOCK_TRAILER_SIZE
       for (const { key, value: entryValue } of readBlockEntries(readBlock(bytes, handle))) {
         // Internal key: user key + 8 bytes of (sequence << 8 | type)
         if (key.length < 8) {

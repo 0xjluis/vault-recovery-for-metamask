@@ -108,7 +108,9 @@ async function scan (fileList, onlyLevelDB) {
   $('scan-status').textContent = `${files.length} file(s) read, ${vaults.length} vault(s) found.`
     + (errors.length ? ` ${errors.length} file(s) could not be parsed and were scanned as raw bytes.` : '')
   const list = $('vault-list')
-  list.replaceChildren(...vaults.map(({ sources, inKeyringController }) => {
+  // One by one: spreading many vaults as arguments overflows the stack
+  list.replaceChildren()
+  for (const { sources, inKeyringController } of vaults) {
     const item = el('li')
     for (const group of groupSources(sources)) {
       item.append(el('div', 'source mono', describeSource(group)))
@@ -116,8 +118,8 @@ async function scan (fileList, onlyLevelDB) {
     if (!inKeyringController) {
       item.append(el('div', 'error', 'Not where MetaMask keeps its vault: it can be a damaged copy, or text that a website or another extension wrote.'))
     }
-    return item
-  }))
+    list.append(item)
+  }
   updateControls()
   renderResults()
 }
@@ -178,16 +180,20 @@ async function decrypt (password) {
 
 function renderResults () {
   const showSecrets = $('show-secrets').checked && !isOnline()
-  $('results').replaceChildren(...entries.map((entry, index) => {
+  const results = $('results')
+  // One by one: spreading many vaults as arguments overflows the stack
+  results.replaceChildren()
+  entries.forEach((entry, index) => {
     const card = el('div', 'vault')
+    results.append(card)
     card.append(el('h3', '', `Vault ${index + 1}`))
     if (entry.error) {
       card.append(el('div', entry.error === NOT_TRIED ? 'muted' : 'error', entry.error))
-      return card
+      return
     }
     if (entry.sameAs !== undefined) {
       card.append(el('div', 'muted', `Same contents as vault ${entry.sameAs + 1}`))
-      return card
+      return
     }
     for (const keyring of entry.keyrings) {
       const block = el('div', 'keyring')
@@ -206,8 +212,7 @@ function renderResults () {
       }
       card.append(block)
     }
-    return card
-  }))
+  })
 }
 
 // Browsers may restore form state on reload: secrets always start hidden

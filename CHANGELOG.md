@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.3.1 - 2026-10-29
+
+Security fixes from an audit of 0.3.0. Update if you use 0.3.0: with it, a crafted file could show a fake recovery
+phrase as if it came from your vault.
+
+- Text from the files is no longer shown as it is. Error messages do not quote the vault's `keyMetadata`, and the
+  command line and the kit show control characters, line breaks and bidi overrides as `?`: a crafted vault could
+  print a fake second vault with another phrase, or write to the clipboard.
+- Vaults found outside MetaMask's `KeyringController` state, such as text that a website wrote into the profile
+  (tab titles, NFT names, `localStorage`), are marked "Not where MetaMask keeps its vault" and listed last. The
+  page and the command line ask for MetaMask's folders, not the whole profile.
+- Every file is also scanned as raw bytes, so vaults in damaged records are no longer missed.
+- A crafted file can no longer block the search for hours, make the table reader decompress gigabytes, or crash
+  it with hundreds of thousands of copies. The iteration limit goes down to 2 million.
+- The command line no longer follows links inside folders, reads only regular files, and reports what it skips
+  instead of stopping. The kit reports the folders it cannot read, and copies regular files only, never through
+  junctions or symbolic links.
+- The page clears everything when new files are chosen, and a damaged keyring no longer hides the others.
+- `--json` includes the encrypted vault only with `--show-secrets`.
+- The documents name the official repository and the signing key, check for files added to a release, and put
+  verifying the release before running the kit. Releases now ship `SHA256SUMS.sig`, an SSH signature checked with
+  `ssh-keygen -Y verify`.
+- The offline audit is described as the heuristic it is, and catches more ways to hide network access; the test
+  network blocker covers UDP and every DNS query.
+
 ## 0.3.0 - 2026-10-28
 
 - Renamed to Vault Recovery for MetaMask (`vault-recovery-for-metamask`), with a notice that the project is not

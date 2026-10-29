@@ -1,5 +1,5 @@
 // Kept equal to package.json's version and engines by test/version.test.js
-export const VERSION = '0.3.0'
+export const VERSION = '0.3.1'
 
 // Oldest Node.js accepted: 26 LTS with the October 2026 security fixes
 export const MIN_NODE_VERSION = '26.12.1'

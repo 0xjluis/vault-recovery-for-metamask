@@ -52,9 +52,11 @@ function isOnline () {
 function updateControls () {
   const online = isOnline()
   $('network-warning').hidden = !online
-  for (const id of ['folder', 'files', 'show-secrets']) {
-    $(id).disabled = online
+  // No new files while decrypting: the results would belong to the previous ones
+  for (const id of ['folder', 'files']) {
+    $(id).disabled = online || decrypting
   }
+  $('show-secrets').disabled = online
   $('password').disabled = online || !entries.length
   $('decrypt').disabled = online || !entries.length || decrypting
 }
@@ -92,13 +94,29 @@ async function scan (fileList, onlyLevelDB) {
   if (isOnline()) {
     return
   }
-  const started = generation
+  // Nothing from the previous files stays on the page, even if these cannot be read:
+  // their accounts would look like the new folder's
+  const started = ++generation
+  entries = []
+  $('show-secrets').checked = false
+  $('decrypt-status').textContent = ''
+  $('vault-list').replaceChildren()
+  renderResults()
+  updateControls()
   const selected = [...fileList].filter(file => !onlyLevelDB || LEVELDB_FILE.test(file.name))
   $('scan-status').textContent = `Reading ${selected.length} file(s)…`
-  const files = await Promise.all(selected.map(async file => ({
-    name: file.webkitRelativePath || file.name,
-    bytes: new Uint8Array(await file.arrayBuffer()),
-  })))
+  let files
+  try {
+    files = await Promise.all(selected.map(async file => ({
+      name: file.webkitRelativePath || file.name,
+      bytes: new Uint8Array(await file.arrayBuffer()),
+    })))
+  } catch (err) {
+    if (started === generation) {
+      $('scan-status').textContent = 'Some files could not be read, for example because a browser is using them. Close it, or copy the folder first, and choose it again.'
+    }
+    return
+  }
   if (started !== generation || isOnline()) {
     return
   }
@@ -108,13 +126,18 @@ async function scan (fileList, onlyLevelDB) {
   $('scan-status').textContent = `${files.length} file(s) read, ${vaults.length} vault(s) found.`
     + (errors.length ? ` ${errors.length} file(s) could not be parsed and were scanned as raw bytes.` : '')
   const list = $('vault-list')
-  list.replaceChildren(...vaults.map(({ sources }) => {
+  // One by one: spreading many vaults as arguments overflows the stack
+  list.replaceChildren()
+  for (const { sources, inKeyringController } of vaults) {
     const item = el('li')
     for (const group of groupSources(sources)) {
       item.append(el('div', 'source mono', describeSource(group)))
     }
-    return item
-  }))
+    if (!inKeyringController) {
+      item.append(el('div', 'error', 'Not where MetaMask keeps its vault: it can be a damaged copy, or text that a website or another extension wrote.'))
+    }
+    list.append(item)
+  }
   updateControls()
   renderResults()
 }
@@ -175,16 +198,20 @@ async function decrypt (password) {
 
 function renderResults () {
   const showSecrets = $('show-secrets').checked && !isOnline()
-  $('results').replaceChildren(...entries.map((entry, index) => {
+  const results = $('results')
+  // One by one: spreading many vaults as arguments overflows the stack
+  results.replaceChildren()
+  entries.forEach((entry, index) => {
     const card = el('div', 'vault')
+    results.append(card)
     card.append(el('h3', '', `Vault ${index + 1}`))
     if (entry.error) {
       card.append(el('div', entry.error === NOT_TRIED ? 'muted' : 'error', entry.error))
-      return card
+      return
     }
     if (entry.sameAs !== undefined) {
       card.append(el('div', 'muted', `Same contents as vault ${entry.sameAs + 1}`))
-      return card
+      return
     }
     for (const keyring of entry.keyrings) {
       const block = el('div', 'keyring')
@@ -198,13 +225,14 @@ function renderResults () {
           block.append(el('div', 'secret mono', `Private key: ${account.privateKey}`))
         }
       }
-      if (!keyring.accounts.length) {
+      if (keyring.error) {
+        block.append(el('div', 'error', `Not read: ${keyring.error}`))
+      } else if (!keyring.accounts.length) {
         block.append(el('div', 'account muted', 'No accounts'))
       }
       card.append(block)
     }
-    return card
-  }))
+  })
 }
 
 // Browsers may restore form state on reload: secrets always start hidden

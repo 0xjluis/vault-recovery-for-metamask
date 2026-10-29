@@ -33,8 +33,8 @@ folder; `find-metamask` finds them all by folder name.
 
 ### If the computer starts
 
-Close the browser first (it keeps its database files locked and may write to them), then go to step 2 and run the
-kit on the user's home folder.
+Close the browser first (it keeps its database files locked and may write to them), disconnect the computer from
+every network, then go to step 2 and run the kit on the user's home folder.
 
 ### If the computer does not start
 
@@ -80,6 +80,9 @@ sudo mount -t ntfs-3g -o ro /dev/sdX2 /mnt/disk
 Do not run repair tools (`ntfsfix`, `chkdsk`, `fsck`) before you have your copy: they write to the disk.
 
 ## 2. Find and copy MetaMask's data
+
+Run the kit only from a release you have verified ([verifying-a-release.md](verifying-a-release.md)), with the
+computer already disconnected: it needs no network, and a tampered kit would run with your user's rights.
 
 The kit looks for MetaMask's two data folders in every profile under the folder you give it, and copies them:
 
@@ -136,7 +139,8 @@ node vault-recovery.mjs <copied folder>
 
 Both tools:
 
-- show every distinct vault, newest first, and where each one was found;
+- show every distinct vault and where each one was found: first those found where MetaMask keeps its vault, newest
+  first, then those marked "Not where MetaMask keeps its vault" (damaged copies, or text a website wrote);
 - ask for another password when some vaults do not open with the first one;
 - show the addresses first; the secret recovery phrase and the private keys appear only when you tick **Show the
   secret recovery phrase and the private keys** in the page, or add `--show-secrets` to the command;
@@ -161,6 +165,8 @@ Both tools:
 | Problem | What to check |
 | --- | --- |
 | The kit finds nothing | Search a wider folder (the whole disk), check the user and browser. Firefox keeps extension data in a different format that this tool does not read yet |
+| The kit says some folders could not be read | On a disk from another computer, user folders belong to that computer's users. Run the kit as root (`sudo`) on Linux and macOS, or PowerShell as administrator on Windows; MetaMask's folders may be among those it could not search |
+| The kit or the command line skip links | Links and junctions are not followed, so they cannot loop or lead to files outside the copy. MetaMask's own folders never contain them |
 | A vault does not open with any password | It may come from another profile or an older installation with another password. Every vault is independent |
 | Files are reported as "scanned as raw bytes" | They are damaged. Vaults are still searched in them, but some older copies may be lost |
 | The page stays locked offline | The browser still reports a connection, often because of a virtual network adapter (VPN, virtual machines, WSL). Disable it, or use the command-line tool |

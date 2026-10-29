@@ -17,11 +17,25 @@ const block = name => () => {
 
 net.connect = net.createConnection = block('net.connect')
 net.Socket.prototype.connect = block('net.Socket.connect')
+// A server lets others connect to this process
+net.Server.prototype.listen = block('net.Server.listen')
 tls.connect = block('tls.connect')
 dgram.createSocket = block('dgram.createSocket')
-for (const name of ['lookup', 'resolve', 'resolve4', 'resolve6', 'resolveAny']) {
-  dns[name] = block(`dns.${name}`)
-  dns.promises[name] = block(`dns.promises.${name}`)
+// The class too: `new dgram.Socket('udp4')` does not go through createSocket
+for (const name of ['bind', 'connect', 'send']) {
+  dgram.Socket.prototype[name] = block(`dgram.Socket.${name}`)
+}
+// Every lookup, resolve and reverse function, also through Resolver objects: a DNS query
+// is enough to send data out
+for (const [prefix, api] of [
+  ['dns', dns],
+  ['dns.promises', dns.promises],
+  ['dns.Resolver', dns.Resolver.prototype],
+  ['dns.promises.Resolver', dns.promises.Resolver.prototype],
+]) {
+  for (const name of Object.getOwnPropertyNames(api).filter(name => /^(lookup|resolve|reverse)/.test(name))) {
+    api[name] = block(`${prefix}.${name}`)
+  }
 }
 http.request = http.get = block('http.request')
 https.request = https.get = block('https.request')

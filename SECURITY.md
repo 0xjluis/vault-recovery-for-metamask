@@ -16,11 +16,20 @@ test case with a throwaway wallet instead (`test/helpers.js` shows how).
 
 Only the latest release receives fixes.
 
+## The only official source
+
+- Repository and releases: `https://github.com/0xjluis/vault-recovery-for-metamask`
+- Signing key of commits, tags and `SHA256SUMS`: SSH Ed25519 `SHA256:lbz25JepdbVPhbBtAfT08husAFZMmw4VppPnnLsYMV4`
+
+A copy of this project at any other address is not this project, even if its files and documents look the same:
+[docs/verifying-a-release.md](docs/verifying-a-release.md) shows how to check a release.
+
 ## What the maintainers will never do
 
 - Ask for your recovery phrase, private keys, password or vault files.
 - Contact you first, or offer recovery help by direct message, e-mail or any other channel.
-- Publish releases anywhere other than this repository's Releases page.
+- Publish releases anywhere other than the Releases page of the repository above: not on npm, not in other
+  repositories, not as downloads on other sites.
 
 Anyone doing so is impersonating the project.
 

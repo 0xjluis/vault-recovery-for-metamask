@@ -55,10 +55,20 @@ done
 unset 'predicate[${#predicate[@]}-1]'
 
 echo "Searching $root (this can take a few minutes on a whole disk)..." >&2
+# Folders that cannot be read are reported: on a disk from another computer, MetaMask's
+# folders are often in a home folder that only its owner can read
+errors=$(mktemp)
+trap 'rm -f "$errors"' EXIT
 found=()
 while IFS= read -r -d '' dir; do
   found+=("$dir")
-done < <(find "$root" -type d \( "${predicate[@]}" \) -prune -print0 2>/dev/null || true)
+done < <(find "$root" -type d \( "${predicate[@]}" \) -prune -print0 2>"$errors" || true)
+
+if [ -s "$errors" ]; then
+  echo "WARNING: $(wc -l < "$errors" | tr -d ' ') folder(s) could not be read, and were not searched:" >&2
+  head -n 10 "$errors" | LC_ALL=C sed 's/[[:cntrl:]]/?/g; s/^/  /' >&2
+  echo "Run the kit again as root (sudo), or give your user access to those folders." >&2
+fi
 
 if [ "${#found[@]}" -eq 0 ]; then
   echo "No MetaMask folders found under $root" >&2
@@ -69,7 +79,9 @@ echo "Found ${#found[@]} MetaMask folder(s):"
 for dir in "${found[@]}"; do
   files=$(find "$dir" -type f | wc -l | tr -d ' ')
   size=$(du -sh "$dir" 2>/dev/null | cut -f1)
-  echo "  ${dir#"$root"/}  ($files files, $size)"
+  # Folder names can hold terminal escape sequences: show control characters as '?'
+  name=$(printf '%s' "${dir#"$root"/}" | LC_ALL=C tr '[:cntrl:]' '?')
+  echo "  $name  ($files files, $size)"
 done
 
 if [ -z "$dest" ]; then
@@ -80,10 +92,18 @@ fi
 out="$dest/metamask-data-$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "$out"
 
+# Regular files only, one by one: a symlink can point anywhere on this computer, and a
+# FIFO blocks whatever reads it later
 for dir in "${found[@]}"; do
   rel=${dir#"$root"/}
-  mkdir -p "$out/$(dirname "$rel")"
-  cp -R "$dir" "$out/$(dirname "$rel")/"
+  find "$dir" ! -type f ! -type d -print0 | while IFS= read -r -d '' other; do
+    echo "Not copied, not a regular file: $(printf '%s' "$rel${other#"$dir"}" | LC_ALL=C tr '[:cntrl:]' '?')" >&2
+  done
+  find "$dir" -type f -print0 | while IFS= read -r -d '' file; do
+    target="$out/$rel${file#"$dir"}"
+    mkdir -p "$(dirname -- "$target")"
+    cp -- "$file" "$target"
+  done
 done
 
 # Checksums of the SOURCE files, with the paths they have in the copy

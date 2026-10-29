@@ -23,8 +23,9 @@ before(async () => {
   }
 })
 
+// With a timeout: an attempt the blocker misses can keep the process waiting
 const runBlocked = (args, input) =>
-  spawnSync(process.execPath, ['--import', BLOCK_NETWORK, ...args], { input, encoding: 'utf8' })
+  spawnSync(process.execPath, ['--import', BLOCK_NETWORK, ...args], { input, encoding: 'utf8', timeout: 30000 })
 
 test('the built files pass the offline audit', () => {
   assert.deepEqual(auditOffline(dir), {
@@ -54,10 +55,51 @@ test('the audit catches a page that allows connections and a CLI that fetches', 
   }
 })
 
+test('the audit catches network access written to hide from it', () => {
+  const tampered = mkdtempSync(join(tmpdir(), 'tampered-'))
+  try {
+    for (const name of ['vault-recovery.html', 'find-metamask.sh', 'find-metamask.ps1']) {
+      copyFileSync(join(dir, name), join(tampered, name))
+    }
+    const cli = readFileSync(join(dir, 'vault-recovery.mjs'), 'utf8')
+    const hidden = [
+      // A "/*" in a string used to hide the rest of the line from a comment-stripping regex
+      `const marker = "/*"; fetch('https://example.com') // */`,
+      `process.getBuiltinModule('node:net')`,
+      `globalThis['fe' + 'tch']('https://example.com')`,
+      `import/**/'node:net'`,
+      `export * from 'node:dgram'`,
+    ]
+    for (const code of hidden) {
+      writeFileSync(join(tampered, 'vault-recovery.mjs'), `${cli}\n${code}\n`)
+      assert.notDeepEqual(auditOffline(tampered)['vault-recovery.mjs'], [], code)
+    }
+    for (const line of ['exec 3<>/dev/tcp/example.com/80', 'node -e "fetch(1)"']) {
+      writeFileSync(join(tampered, 'find-metamask.sh'), `${line}\n`)
+      assert.notDeepEqual(auditOffline(tampered)['find-metamask.sh'], [], line)
+    }
+    writeFileSync(join(tampered, 'find-metamask.ps1'), 'iex (New-Object Net.WebClient).DownloadString($u)\n')
+    assert.notDeepEqual(auditOffline(tampered)['find-metamask.ps1'], [])
+  } finally {
+    rmSync(tampered, { recursive: true, force: true })
+  }
+})
+
 test('the network blocker stops a connection attempt', () => {
-  const { status, stderr } = runBlocked(['-e', "fetch('https://example.com')"])
-  assert.equal(status, 99)
-  assert.match(stderr, /NETWORK ATTEMPT: fetch/)
+  // DNS servers set to this computer: if the blocker misses an attempt, no query leaves it
+  const local = "require('node:dns').setServers(['127.0.0.1']);"
+  const attempts = [
+    ["fetch('https://example.com')", /fetch/],
+    ["new (require('node:dgram').Socket)('udp4').send('x', 53, '127.0.0.1')", /dgram\.Socket\.send/],
+    [`${local} const r = new (require('node:dns').Resolver)(); r.setServers(['127.0.0.1']); r.resolveTxt('example.com', () => {})`, /dns\.Resolver\.resolveTxt/],
+    // Node.js can run it through the default Resolver, also blocked
+    [`${local} require('node:dns').promises.resolveTxt('example.com')`, /dns\.promises\.(Resolver\.)?resolveTxt/],
+  ]
+  for (const [code, name] of attempts) {
+    const { status, stderr } = runBlocked(['-e', code])
+    assert.equal(status, 99, code)
+    assert.match(stderr, new RegExp(`NETWORK ATTEMPT: ${name.source}`))
+  }
 })
 
 test('the bundled CLI decrypts a vault with the network blocked', async () => {

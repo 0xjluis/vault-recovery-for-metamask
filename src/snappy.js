@@ -2,6 +2,9 @@
 // Format: https://github.com/google/snappy/blob/main/format_description.txt
 
 const MAX_LENGTH = 1 << 26
+// A valid block expands at most about 21 times (a 3-byte copy of 64 bytes): a larger
+// length is refused before allocating it
+const MAX_EXPANSION = 22
 
 /**
  * @param {Uint8Array} input - Compressed block.
@@ -20,7 +23,7 @@ export function snappyUncompress (input) {
     length += (byte & 0x7f) * 2 ** shift
     shift += 7
   } while (byte & 0x80)
-  if (length > MAX_LENGTH) {
+  if (length > MAX_LENGTH || length > input.length * MAX_EXPANSION) {
     throw new Error('Snappy block too large')
   }
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
@@ -38,6 +38,51 @@ test('prints secrets in JSON only with --show-secrets', () => {
   const [entry] = JSON.parse(stdout)
   assert.equal(entry.keyrings[0].mnemonic, HARDHAT.mnemonic)
   assert.equal(entry.keyrings[1].accounts[0].privateKey, HARDHAT.imported.privateKey)
+  assert.equal(entry.vault.data, vault.data)
+
+  // The encrypted vault is enough to try passwords offline: not in output without secrets
+  const [plain] = JSON.parse(run(['--json', dir], 'right\n').stdout)
+  assert.equal(plain.keyrings[0].mnemonic, undefined)
+  assert.equal(plain.vault, undefined)
+})
+
+test('shows control characters from the files as ? and marks vaults found elsewhere', async t => {
+  const evil = mkdtempSync(join(tmpdir(), 'vault-recovery-'))
+  t.after(() => rmSync(evil, { recursive: true, force: true }))
+  const ledger = await encryptVault([{ type: 'Ledger\u001b[2J\nVault 9', data: { accounts: ['0xab\u001b]52;c;cHduZWQ=\u0007'] } }], 'right')
+  // A website's tab title holding a fake vault whose keyMetadata carries escape sequences
+  const planted = { ...ledger, iv: 'cGxhbnRlZA==', keyMetadata: { algorithm: '\u001b[8m', params: {} } }
+  writeFileSync(join(evil, '000003.log'), makeLogFile([
+    { sequence: 5, ops: [{ key: 'KeyringController', value: JSON.stringify({ vault: JSON.stringify(ledger) }) }] },
+    { sequence: 6, ops: [{ key: 'SubjectMetadataController', value: JSON.stringify({ name: JSON.stringify(planted) }) }] },
+  ]))
+  const { stdout, status } = run([evil], 'right\n')
+  assert.equal(status, 0)
+  assert.doesNotMatch(stdout, /[\x00-\x09\x0b-\x1f\x7f]/)
+  assert.match(stdout, /Ledger\?\[2J\?Vault 9/)
+  assert.match(stdout, /0xab\?\]52;c;cHduZWQ=\?/)
+  assert.match(stdout, /Vault 2\n.*key SubjectMetadataController.*\n {2}Not where MetaMask keeps its vault.*\n {2}Not decrypted: Unsupported key derivation\n/)
+})
+
+test('skips links and paths it cannot read instead of stopping', t => {
+  const base = mkdtempSync(join(tmpdir(), 'vault-recovery-'))
+  t.after(() => rmSync(base, { recursive: true, force: true }))
+  const profile = join(base, 'profile')
+  const outside = join(base, 'outside')
+  mkdirSync(profile)
+  mkdirSync(outside)
+  copyFileSync(join(dir, '000003.log'), join(profile, '000003.log'))
+  copyFileSync(join(dir, '000003.log'), join(outside, '000004.log'))
+  // A loop, like the 'Application Data' junction of Windows profiles, and a way out of the copy
+  const type = process.platform === 'win32' ? 'junction' : 'dir'
+  symlinkSync(profile, join(profile, 'loop'), type)
+  symlinkSync(outside, join(profile, 'outside'), type)
+  const { stdout, status } = run([profile, join(base, 'missing')], 'right\n')
+  assert.equal(status, 0)
+  assert.match(stdout, /loop: link not followed/)
+  assert.match(stdout, /outside: link not followed/)
+  assert.match(stdout, /Warning: ENOENT.*missing.*skipped/)
+  assert.match(stdout, /1 file\(s\) read, 1 vault\(s\) found/)
 })
 
 test('fails when no password works', () => {

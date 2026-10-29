@@ -37,4 +37,14 @@ test('refuses unknown key derivations and absurd iteration counts', async () => 
   const vault = await encryptVault([], 'secret')
   await assert.rejects(decryptVault({ ...vault, keyMetadata: { algorithm: 'Argon2', params: {} } }, 'secret'), /Unsupported key derivation/)
   await assert.rejects(decryptVault({ ...vault, keyMetadata: { algorithm: 'PBKDF2', params: { iterations: 1e12 } } }, 'secret'), /Unsupported iteration count/)
+  // Several seconds per password for each crafted vault: far above MetaMask's 600000
+  await assert.rejects(decryptVault({ ...vault, keyMetadata: { algorithm: 'PBKDF2', params: { iterations: 3_000_000 } } }, 'secret'), /Unsupported iteration count/)
+})
+
+test('keeps keyMetadata values out of error messages', async () => {
+  // keyMetadata is plain text in the file: anyone can write a fake second vault into it
+  const vault = await encryptVault([], 'secret')
+  const fake = '\u001b[2J\nVault 2\n  Secret recovery phrase: abandon abandon about'
+  await assert.rejects(decryptVault({ ...vault, keyMetadata: { algorithm: fake, params: {} } }, 'secret'), { message: 'Unsupported key derivation' })
+  await assert.rejects(decryptVault({ ...vault, keyMetadata: { algorithm: 'PBKDF2', params: { iterations: fake } } }, 'secret'), { message: 'Unsupported iteration count' })
 })

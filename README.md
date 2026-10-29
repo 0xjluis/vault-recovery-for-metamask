@@ -19,7 +19,7 @@ other tool.
 
 Nothing here connects to the internet. The web page's Content Security Policy blocks every network request and
 the page refuses to work while the computer is connected to a network; the command-line tool only reads the files
-you give it. Both are checked for this on every build ([docs/security.md](docs/security.md)).
+you give it. Tests and a heuristic audit check this on every build ([docs/security.md](docs/security.md)).
 
 ## Stay safe
 
@@ -30,8 +30,10 @@ Wallet recovery attracts scammers. Before you start:
   funds.
 - **The maintainers never contact you first** and never offer help by direct message. Messages, comments or support
   sites that say otherwise are impersonations.
-- **Only use releases from this repository**, and [verify them](docs/verifying-a-release.md) before running them.
-  Copies of recovery tools that steal keys are common; a verified release matches the published `SHA256SUMS`.
+- **Only use releases from `https://github.com/0xjluis/vault-recovery-for-metamask`**, and
+  [verify them](docs/verifying-a-release.md) before running anything, the kit included. Copies of recovery tools
+  that steal keys are common, and they look the same: a verified release matches the published `SHA256SUMS`,
+  signed with the SSH key `SHA256:lbz25JepdbVPhbBtAfT08husAFZMmw4VppPnnLsYMV4`.
 - **Decrypt on a computer disconnected from every network**, and delete the copied files when you are done.
 - **Never paste vaults, files, passwords or secrets into an issue.** Security problems go through
   [SECURITY.md](SECURITY.md).
@@ -48,12 +50,20 @@ Wallet recovery attracts scammers. Before you start:
 | `SECURITY.md` | How to report a vulnerability, and what the maintainers will never ask for |
 | `BUILD-INFO.txt` | Git commit and toolchain the release was built from |
 | `SHA256SUMS` | SHA-256 of every file above |
+| `SHA256SUMS.sig` | The maintainer's SSH signature of `SHA256SUMS` (releases after 0.3.0) |
 
 **Verify a release before using it**: [docs/verifying-a-release.md](docs/verifying-a-release.md).
 
 ## Quick start
 
-1. **Copy MetaMask's data folders** out of the browser profile, with `find-metamask.sh` or `find-metamask.ps1`, or
+1. **Verify the release** ([docs/verifying-a-release.md](docs/verifying-a-release.md)) before running any file of
+   it.
+
+2. **Disconnect the computer from every network.** Nothing in this tool needs a network. Disconnecting also keeps a
+   tampered copy from sending anything while it runs, though not later: that is why step 1 comes first. The web
+   page stays locked until you disconnect.
+
+3. **Copy MetaMask's data folders** out of the browser profile, with `find-metamask.sh` or `find-metamask.ps1`, or
    by hand. For each profile that had MetaMask:
 
    ```
@@ -65,15 +75,13 @@ Wallet recovery attracts scammers. Before you start:
    `ejbalbakoplchlghecdalmeeeajnimhm` for the Edge Add-ons build. Where profiles live, and how to reach them on a
    computer that does not start: [docs/recovery-guide.md](docs/recovery-guide.md).
 
-2. **Disconnect the computer from every network.** The web page stays locked until you do.
-
-3. **Decrypt** with either tool:
+4. **Decrypt** with either tool:
    - open `vault-recovery.html`, choose the copied folder, type the password;
    - or run `node vault-recovery.mjs <copied folder>`.
 
    Both list every vault found and its accounts. Secrets stay hidden until you ask for them.
 
-4. **Restore** the phrase and any imported private key in a fresh MetaMask, then delete the copies.
+5. **Restore** the phrase and any imported private key in a fresh MetaMask, then delete the copies.
 
 ## Why another tool
 
@@ -105,7 +113,7 @@ pnpm build
 | --- | --- |
 | `pnpm test` | Unit tests, upstream fixtures, a real Chrome IndexedDB file, the kit scripts and the offline checks |
 | `pnpm build` | Builds `dist/vault-recovery.html` and `dist/vault-recovery.mjs` |
-| `pnpm audit:offline <folder>` | Checks that the built files cannot reach the network |
+| `pnpm audit:offline <folder>` | Heuristic check that the built files use no known way to reach the network |
 | `pnpm release` | Assembles `release/vault-recovery-for-metamask-v<version>/` from a clean commit |
 | `pnpm verify-release <folder>` | Checks a release against `SHA256SUMS` and rebuilds it to compare every byte |
 

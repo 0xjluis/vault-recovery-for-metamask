@@ -2,7 +2,7 @@
 // Finds and decrypts MetaMask vaults in browser profile folders. Works offline: it only
 // reads the files it is given and never opens a network connection.
 
-import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { lstatSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { parseArgs } from 'node:util'
@@ -24,18 +24,34 @@ Finds MetaMask vaults in files or folders (folders are searched recursively for
 Usual paths, inside a Chromium browser profile:
   Local Extension Settings/nkbihfbeogaeaoehlefnkodbefgpgknn
   IndexedDB/chrome-extension_nkbihfbeogaeaoehlefnkodbefgpgknn_0.indexeddb.leveldb
-(Edge uses the id ejbalbakoplchlghecdalmeeeajnimhm.)
+(Edge uses the id ejbalbakoplchlghecdalmeeeajnimhm.) Give these folders, not the
+whole profile: websites can write files there that look like a vault.
 
 Options:
   --show-secrets  Print the secret recovery phrase and the private keys
-  --json          JSON output (secrets only with --show-secrets)
+  --json          JSON output (secrets and the encrypted vault only with --show-secrets)
   -v, --version   Print the version
   -h, --help      Print this help
 `
 
 const LEVELDB_FILE = /\.(ldb|log|sst)$/i
+// Far above the LevelDB files a browser writes; larger files are not read into memory
+const MAX_FILE_SIZE = 256 * 1024 * 1024
 const WRONG_PASSWORD = 'wrong password'
 const NOT_TRIED = 'no password tried'
+// C0 and C1 controls (terminal escape sequences, line breaks) and bidi overrides
+const CONTROL = /[\x00-\x1f\x7f-\x9f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g
+
+/**
+ * File names and text read from the files can be crafted to fake the output, e.g. a
+ * second vault with another phrase: their control characters are shown as '?'.
+ *
+ * @param {unknown} text - Text to print.
+ * @returns {string} Text without control characters.
+ */
+function printable (text) {
+  return String(text).replace(CONTROL, '?')
+}
 
 /** @type {import('node:readline').Interface | undefined} */
 let stdinLines
@@ -43,19 +59,37 @@ let stdinLines
 let stdinIterator
 
 /**
+ * Links inside folders are not followed: they can loop, like the 'Application Data'
+ * junction of Windows profiles, or lead out of the copy, e.g. to this computer's disk.
+ * Only regular files are read, so a FIFO or a device cannot block the search. What
+ * cannot be read is reported and skipped.
+ *
  * @param {string[]} paths - Files or folders given by the user.
+ * @param {(message: string) => void} warn - Reports what was skipped.
  * @returns {{name: string, bytes: Uint8Array}[]} Files to search.
  */
-function collectFiles (paths) {
+function collectFiles (paths, warn) {
   const files = []
   const visit = (path, explicit, base) => {
-    const stats = statSync(path)
-    if (stats.isDirectory()) {
-      for (const entry of readdirSync(path)) {
-        visit(join(path, entry), false, base)
+    try {
+      const stats = explicit ? statSync(path) : lstatSync(path)
+      if (stats.isSymbolicLink()) {
+        warn(`${path}: link not followed`)
+      } else if (stats.isDirectory()) {
+        for (const entry of readdirSync(path)) {
+          visit(join(path, entry), false, base)
+        }
+      } else if (explicit || LEVELDB_FILE.test(path)) {
+        if (!stats.isFile()) {
+          warn(`${path}: not a regular file, skipped`)
+        } else if (stats.size > MAX_FILE_SIZE) {
+          warn(`${path}: larger than ${MAX_FILE_SIZE / 1024 / 1024} MiB, skipped`)
+        } else {
+          files.push({ name: relative(base, path) || path, bytes: new Uint8Array(readFileSync(path)) })
+        }
       }
-    } else if (explicit || LEVELDB_FILE.test(path)) {
-      files.push({ name: relative(base, path) || path, bytes: new Uint8Array(readFileSync(path)) })
+    } catch (err) {
+      warn(`${err.message}, skipped`)
     }
   }
   // Names relative to the folder holding each path given, e.g. 'IndexedDB/…/000003.log'
@@ -118,6 +152,7 @@ function promptHidden (question) {
  */
 function describeSources (sources) {
   return groupSources(sources).map(({ file, key, minSequence, maxSequence, count }) => {
+    file = printable(file)
     if (key === null) {
       return `${file} (raw scan)`
     }
@@ -132,8 +167,11 @@ function printVault (index, entry, showSecrets) {
   for (const line of describeSources(entry.sources)) {
     console.log(`  Found in: ${line}`)
   }
+  if (!entry.inKeyringController) {
+    console.log('  Not where MetaMask keeps its vault: it can be a damaged copy, or text that a website or another extension wrote.')
+  }
   if (entry.error) {
-    console.log(`  Not decrypted: ${entry.error}`)
+    console.log(`  Not decrypted: ${printable(entry.error)}`)
     return
   }
   if (entry.sameAs !== undefined) {
@@ -141,26 +179,31 @@ function printVault (index, entry, showSecrets) {
     return
   }
   for (const keyring of entry.keyrings) {
-    console.log(`  ${keyring.type}`)
+    console.log(`  ${printable(keyring.type)}`)
     if (keyring.mnemonic && showSecrets) {
       console.log(`    Secret recovery phrase: ${keyring.mnemonic}`)
     }
     for (const account of keyring.accounts) {
-      console.log(`    ${account.address}${account.path ? `  ${account.path}` : ''}`)
+      console.log(`    ${printable(account.address)}${account.path ? `  ${printable(account.path)}` : ''}`)
       if (account.privateKey && showSecrets) {
         console.log(`      Private key: ${account.privateKey}`)
       }
     }
-    if (!keyring.accounts.length) {
+    if (keyring.error) {
+      console.log(`    Not read: ${keyring.error}`)
+    } else if (!keyring.accounts.length) {
       console.log('    (no accounts)')
     }
   }
 }
 
 function toJson (entries, showSecrets) {
-  return entries.map(({ vault, sources, error, sameAs, keyrings }) => ({
-    vault,
+  return entries.map(({ vault, sources, inKeyringController, error, sameAs, keyrings }) => ({
+    // With the encrypted vault, anyone can try passwords offline: output shared as
+    // "without secrets" must not include it
+    ...(showSecrets ? { vault } : {}),
     sources,
+    inKeyringController,
     error,
     sameAs,
     keyrings: keyrings?.map(({ mnemonic, accounts, ...keyring }) => ({
@@ -201,10 +244,10 @@ async function main () {
   }
 
   const log = values.json ? console.error : console.log
-  const files = collectFiles(positionals)
+  const files = collectFiles(positionals, message => log(`Warning: ${printable(message)}`))
   const { vaults, errors } = findVaults(files)
   for (const { file, message } of errors) {
-    log(`Warning: ${file}: ${message}, scanned as raw bytes`)
+    log(`Warning: ${printable(file)}: ${printable(message)}, scanned as raw bytes`)
   }
   log(`${files.length} file(s) read, ${vaults.length} vault(s) found`)
   if (!vaults.length) {
@@ -265,6 +308,6 @@ async function main () {
 }
 
 main().catch(err => {
-  console.error(err.message)
+  console.error(printable(err.message))
   process.exitCode = 1
 })

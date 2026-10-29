@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { readLogFile, readTableFile } from '../src/leveldb.js'
-import { makeLogFile } from './helpers.js'
+import { makeLogFile, makeTableFile } from './helpers.js'
 
 const decode = bytes => new TextDecoder().decode(bytes)
 
@@ -42,6 +42,15 @@ test('reads every version of a key from a table file', () => {
   const records = readTableFile(bytes)
   assert.equal(records.length, 41)
   assert.equal(records.filter(r => decode(r.key) === 'data').length, 40)
+})
+
+test('reads each data block of a table once, even if the index points to it again', () => {
+  // A crafted index can repeat a compressed block thousands of times: a decompression bomb
+  const bytes = makeTableFile([
+    [{ key: 'a', sequence: 1, value: 'one' }],
+    [{ key: 'b', sequence: 2, value: 'two' }],
+  ], [0, 1, 1, 0, 1])
+  assert.deepEqual(readTableFile(bytes).map(r => [decode(r.key), decode(r.value), r.sequence]), [['a', 'one', 1], ['b', 'two', 2]])
 })
 
 test('rejects a file that is not a table', () => {

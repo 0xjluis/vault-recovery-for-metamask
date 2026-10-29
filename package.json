@@ -1,6 +1,6 @@
 {
   "name": "vault-recovery-for-metamask",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "Recover MetaMask vaults from a browser profile, offline: CLI and single-file web page",
   "license": "ISC",

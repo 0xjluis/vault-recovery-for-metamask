@@ -1,6 +1,7 @@
 // Verifies a release folder:
-//   1. every file matches SHA256SUMS, with no file missing or added
-//   2. the offline audit passes (no way to reach the network)
+//   1. every file matches SHA256SUMS, with no file missing or added (SHA256SUMS.sig, its
+//      signature, cannot be listed in it)
+//   2. the offline audit passes (no known way to reach the network)
 //   3. unless --no-rebuild: rebuilding from this checkout gives the same bytes, which proves
 //      the published files come from this source code (check out the release tag first)
 // Usage: node scripts/verify-release.js <release folder> [--no-rebuild]
@@ -41,7 +42,7 @@ export async function verifyRelease (dir, { rebuild = true } = {}) {
   const sumsText = readFileSync(join(dir, 'SHA256SUMS'), 'utf8')
   const sums = parseSums(sumsText)
   lines.push(`SHA-256 of SHA256SUMS: ${sha256(sumsText)}`)
-  const files = listFiles(dir).filter(path => path !== 'SHA256SUMS')
+  const files = listFiles(dir).filter(path => path !== 'SHA256SUMS' && path !== 'SHA256SUMS.sig')
   for (const path of files) {
     if (!sums.has(path)) {
       fail(`${path} is not listed in SHA256SUMS`)
@@ -64,7 +65,7 @@ export async function verifyRelease (dir, { rebuild = true } = {}) {
     }
   }
   if (ok) {
-    lines.push('ok    offline audit: the page and the CLI cannot reach the network')
+    lines.push('ok    offline audit: no known way to reach the network (a heuristic check)')
   }
 
   if (rebuild) {

@@ -33,8 +33,8 @@ folder; `find-metamask` finds them all by folder name.
 
 ### If the computer starts
 
-Close the browser first (it keeps its database files locked and may write to them), then go to step 2 and run the
-kit on the user's home folder.
+Close the browser first (it keeps its database files locked and may write to them), disconnect the computer from
+every network, then go to step 2 and run the kit on the user's home folder.
 
 ### If the computer does not start
 
@@ -80,6 +80,9 @@ sudo mount -t ntfs-3g -o ro /dev/sdX2 /mnt/disk
 Do not run repair tools (`ntfsfix`, `chkdsk`, `fsck`) before you have your copy: they write to the disk.
 
 ## 2. Find and copy MetaMask's data
+
+Run the kit only from a release you have verified ([verifying-a-release.md](verifying-a-release.md)), with the
+computer already disconnected: it needs no network, and a tampered kit would run with your user's rights.
 
 The kit looks for MetaMask's two data folders in every profile under the folder you give it, and copies them:
 

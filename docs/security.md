@@ -15,15 +15,21 @@ full control of every account in it. So the tool must:
 
 | Part | Guarantee | How it is checked |
 | --- | --- | --- |
-| `vault-recovery.html` | Its [Content Security Policy](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy) is `default-src 'none'`: the browser refuses any request (fetch, images, fonts, forms, frames...). Only the page's own inline script and style run, allowed by their SHA-256 | `scripts/audit-offline.js` parses the policy, recomputes both hashes and rejects external tags or `src`/`href`/`action` attributes |
-| `vault-recovery.mjs` | Imports only `node:fs`, `node:path`, `node:readline` and `node:util`. No `fetch`, `WebSocket`, `XMLHttpRequest`, `import()` or `require()` | Same script, on the code without comments. `test/offline.test.js` also runs the CLI end to end with every Node.js network API replaced by a function that kills the process |
-| `find-metamask.sh`, `.ps1` | Use only `find`, `cp`, `du`, `sha256sum`/`shasum` (and the PowerShell equivalents) | Same script, against a list of download and remote-copy commands |
+| `vault-recovery.html` | Its [Content Security Policy](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy) is `default-src 'none'`: the browser refuses any request (fetch, images, fonts, forms, frames...). Only the page's own inline script and style run, allowed by their SHA-256 | `scripts/audit-offline.js` parses the policy, recomputes both hashes, rejects external tags or `src`/`href`/`action` attributes, and checks the script like the CLI |
+| `vault-recovery.mjs` | Imports only `node:fs`, `node:path`, `node:readline` and `node:util`. No `fetch`, `WebSocket`, `XMLHttpRequest`, `import()`, `require()`, `process.getBuiltinModule()`, native bindings, `eval`/`Function`, or computed access to `globalThis` or `process` | Same script: imports as [esbuild](https://github.com/evanw/esbuild)'s parser finds them, names in the whole code. `test/offline.test.js` also runs the CLI end to end with the Node.js network APIs (TCP, TLS, UDP, DNS, HTTP, `fetch`) replaced by a function that kills the process |
+| `find-metamask.sh`, `.ps1` | Use only `find`, `cp`, `du`, `sha256sum`/`shasum` (and the PowerShell equivalents) | Same script, against a list of download, remote-copy and interpreter commands |
 
 The audit runs in the test suite, in `pnpm release` and in `pnpm verify-release`, and the tests check that it
-catches a page that allows connections, a CLI that calls `fetch` and a script that downloads.
+catches a page that allows connections, a CLI that calls `fetch` or hides an import, and a script that downloads.
 
-Static checks can be fooled by code written to hide what it does. The browser's enforcement of the policy cannot,
-and neither can a computer without a network.
+The audit is a heuristic: it catches mistakes and plain additions, not code written to hide from it. What it
+cannot fool is the browser's enforcement of the policy, and the reproducible build, which ties the release files to
+the reviewed source ([Release integrity](#release-integrity)).
+
+A computer without a network stops any copy of the tool, genuine or not, from sending something **while it runs**.
+It does not protect against a tampered copy: one can store the password and the secrets and send them the next time
+the computer is online, or leave a program behind that does. So verify a release before you run anything from it,
+the kit included; disconnecting comes after that, not instead.
 
 ## The page only works offline
 
@@ -81,16 +87,27 @@ The command-line tool does not check the connection: it cannot open one in the f
 Every release ships `SHA256SUMS` and `BUILD-INFO.txt`, and the build is reproducible: the same commit and lockfile
 give the same bytes. [verifying-a-release.md](verifying-a-release.md) explains the checks. In short:
 
-1. The hashes in `SHA256SUMS` match the files: nothing changed after the release was made.
-2. The hash of `SHA256SUMS` matches the one published with the release: the list itself was not replaced.
+1. The hashes in `SHA256SUMS` match the files, and the folder has no other file: nothing changed or was added
+   after the release was made.
+2. `SHA256SUMS` is signed by the maintainer (`SHA256SUMS.sig`, checked with `ssh-keygen -Y verify`), or its hash
+   matches the one published with the release: the list itself was not replaced.
 3. Rebuilding from the tagged source gives the same files: they contain exactly that source code.
 
-Commits and release tags are signed with the maintainer's SSH key, whose public key is in `.github/allowed_signers`
-and in the maintainer's GitHub account; GitHub shows them as **Verified**. The signature ties the tag, and the
-`SHA256SUMS` hash in its message, to that key; the reproducible build ties the files to the source.
+Commits, release tags and `SHA256SUMS` are signed with the maintainer's SSH key
+`SHA256:lbz25JepdbVPhbBtAfT08husAFZMmw4VppPnnLsYMV4`, whose public key is in `.github/allowed_signers` and in the
+maintainer's GitHub account; GitHub shows the commits and tags as **Verified**. The signature ties the files list to
+that key; the reproducible build ties the files to the source.
+
+All of this only helps if you start from the official repository, `https://github.com/0xjluis/vault-recovery-for-metamask`:
+a copy elsewhere can ship its own `SHA256SUMS`, signature, key and documents, all consistent with each other. Check the
+address and the key against a source the copy cannot change, such as the maintainer's GitHub account.
 
 ## What it does not protect against
 
+- A tampered copy of the tool, if you run it without verifying it. Disconnecting does not make it safe (see
+  [No network access](#no-network-access)). If you cannot check the signature, decrypt on a live system that keeps
+  nothing after shutdown, such as [Tails](https://tails.net/), and once the wallet is restored, move the funds to a new
+  wallet whose phrase never touched that computer.
 - Malware on the computer where you decrypt. Use a clean, offline system: a live system such as
   [Tails](https://tails.net/), or a fresh browser profile with no extensions on a disconnected computer.
 - Someone who has the copied files and knows or guesses the password. Delete the copies when you are done.

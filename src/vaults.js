@@ -1,7 +1,9 @@
 // Finds MetaMask vaults ({"data","iv","salt"[,"keyMetadata"]} JSON) in browser files.
 // The vault is searched as text inside every LevelDB value instead of relying on key
 // names, so it covers storage.local ("data" or split state, JSON-escaped once) and the
-// IndexedDB backup (V8-serialized strings, not escaped).
+// IndexedDB backup (V8-serialized strings, not escaped). Text from websites can also land
+// in these files (tab titles, NFT names, localStorage), so each vault records whether a
+// copy was found where MetaMask keeps its own: the KeyringController state.
 
 import { readLogFile, readTableFile } from './leveldb.js'
 
@@ -24,6 +26,8 @@ import { readLogFile, readTableFile } from './leveldb.js'
  * @typedef {object} FoundVault
  * @property {Vault} vault
  * @property {VaultSource[]} sources
+ * @property {boolean} inKeyringController - Whether a copy was found in MetaMask's
+ * KeyringController state, and not only elsewhere in the files or by a raw scan.
  */
 
 const BASE64 = /^[A-Za-z0-9+/]+=*$/
@@ -33,6 +37,7 @@ const VAULT_START = /\{(\\*)"data\1"\s*:/g
 
 const latin1 = new TextDecoder('latin1')
 const utf16 = new TextDecoder('utf-16le')
+const utf8 = new TextDecoder()
 
 /**
  * @param {unknown} value - Parsed JSON.
@@ -146,24 +151,49 @@ function printableKey (key) {
 }
 
 /**
+ * MetaMask keeps its vault in the KeyringController state: under its own key in split
+ * state and in the IndexedDB backup, or at KeyringController.vault inside the "data" key.
+ *
+ * @param {string} key - Printable LevelDB key.
+ * @param {Uint8Array} value - LevelDB value the vault was found in.
+ * @param {Vault} vault - Vault found.
+ * @returns {boolean} Whether it is the vault of that KeyringController state.
+ */
+function isKeyringControllerCopy (key, value, vault) {
+  if (key === 'KeyringController') {
+    return true
+  }
+  if (key !== 'data') {
+    return false
+  }
+  try {
+    return vaultId(JSON.parse(JSON.parse(utf8.decode(value)).KeyringController.vault)) === vaultId(vault)
+  } catch (err) {
+    return false
+  }
+}
+
+/**
  * Finds every vault in a set of files: LevelDB `.log` and `.ldb` files are parsed,
  * and every file is also scanned as raw bytes in case it is damaged.
  *
  * @param {{name: string, bytes: Uint8Array}[]} files - Files to search.
  * @returns {{vaults: FoundVault[], errors: {file: string, message: string}[]}} Distinct
- * vaults, newest first, and the files that could not be parsed.
+ * vaults, those found in the KeyringController state first, then newest first, and the
+ * files that could not be parsed.
  */
 export function findVaults (files) {
   /** @type {Map<string, FoundVault>} */
   const found = new Map()
   const errors = []
 
-  const add = (vault, source) => {
+  const add = (vault, source, inKeyringController) => {
     const id = vaultId(vault)
-    const entry = found.get(id) ?? { vault, sources: [] }
+    const entry = found.get(id) ?? { vault, sources: [], inKeyringController: false }
     if (!entry.sources.some(s => s.file === source.file && s.key === source.key && s.sequence === source.sequence)) {
       entry.sources.push(source)
     }
+    entry.inKeyringController ||= inKeyringController
     found.set(id, entry)
   }
 
@@ -179,27 +209,29 @@ export function findVaults (files) {
       errors.push({ file: name, message: err.message })
     }
 
-    let parsed = 0
+    const parsed = new Set()
     for (const record of records) {
       if (!record.value) {
         continue
       }
+      const key = printableKey(record.key)
       for (const vault of findVaultsInBytes(record.value)) {
-        add(vault, { file: name, key: printableKey(record.key), sequence: record.sequence })
-        parsed++
+        add(vault, { file: name, key, sequence: record.sequence }, isKeyringControllerCopy(key, record.value, vault))
+        parsed.add(vaultId(vault))
       }
     }
-    // Raw scan finds vaults in damaged or unknown files; skip it when parsing worked
-    if (parsed === 0) {
-      for (const vault of findVaultsInBytes(bytes)) {
-        add(vault, { file: name, key: null, sequence: null })
+    // Raw scan finds vaults in damaged or unknown files, and in records the parser skipped
+    // because they are damaged; vaults already found in this file are not added again
+    for (const vault of findVaultsInBytes(bytes)) {
+      if (!parsed.has(vaultId(vault))) {
+        add(vault, { file: name, key: null, sequence: null }, false)
       }
     }
   }
 
   const newest = entry => Math.max(-1, ...entry.sources.map(s => s.sequence ?? -1))
   return {
-    vaults: [...found.values()].sort((a, b) => newest(b) - newest(a)),
+    vaults: [...found.values()].sort((a, b) => Number(b.inKeyringController) - Number(a.inKeyringController) || newest(b) - newest(a)),
     errors,
   }
 }

@@ -59,10 +59,18 @@ Instead of following key names, the tool looks for the vault's own shape in ever
   in UTF-16.
 
 The search reads each value as one-byte text and as UTF-16, finds `{"data":` at any escaping level, takes the whole
-object and checks it. If a file cannot be parsed as LevelDB, the same search runs over its raw bytes.
+object and checks it. The same search also runs over the raw bytes of every file, which finds vaults in files that
+cannot be parsed as LevelDB and in damaged records that the parser skips.
 
-Copies of the same vault (same `data`, `iv` and `salt`) are merged, keeping every place they were found, and vaults
-are sorted by their newest copy. Different vaults can still hold the same accounts, since MetaMask re-encrypts the
+Text that websites control also lands in these files: the title of the active tab and NFT names in MetaMask's own
+state, and `localStorage` elsewhere in the profile. A website can write a fake vault there. It cannot make it open
+with your password, but it can fill the list with vaults that do not open. So each vault records whether a copy was
+found where MetaMask keeps its own, the `KeyringController` state: its own key in the split `storage.local` layout
+and in the IndexedDB backup, or `KeyringController.vault` inside the `data` key. The tools mark the others as "Not
+where MetaMask keeps its vault"; they can also be damaged copies of the real one.
+
+Copies of the same vault (same `data`, `iv` and `salt`) are merged, keeping every place they were found. Vaults found
+in the `KeyringController` state come first, and then they are sorted by their newest copy. Different vaults can still hold the same accounts, since MetaMask re-encrypts the
 vault with a new `iv` and `salt` when it saves it; after decryption, the tools show those as "Same contents as
 vault N".
 

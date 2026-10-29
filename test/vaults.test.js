@@ -65,6 +65,41 @@ test('falls back to a raw scan when a file cannot be parsed', () => {
   assert.deepEqual(vaults[0].sources, [{ file: '000005.ldb', key: null, sequence: null }])
 })
 
+test('also scans the raw bytes of a parsed file, for records the parser skips', () => {
+  const damaged = { ...vault, iv: 'ZGFtYWdlZA==' }
+  const state = v => JSON.stringify({ vault: JSON.stringify(v) })
+  const good = makeLogFile([{ sequence: 1, ops: [{ key: 'KeyringController', value: state(vault) }] }])
+  const second = makeLogFile([{ sequence: 2, ops: [{ key: 'KeyringController', value: state(damaged) }] }])
+  // Invalid fragment type in the header of the second record: the parser skips it
+  second[6] = 9
+  const { vaults, errors } = findVaults([{ name: '000003.log', bytes: Uint8Array.from([...good, ...second]) }])
+  assert.deepEqual(errors, [])
+  assert.deepEqual(vaults.map(v => v.vault.iv), [vault.iv, damaged.iv])
+  assert.deepEqual(vaults[0].sources, [{ file: '000003.log', key: 'KeyringController', sequence: 1 }])
+  assert.deepEqual(vaults[1].sources, [{ file: '000003.log', key: null, sequence: null }])
+})
+
+test('puts vaults found outside the KeyringController state last, even if newer', () => {
+  const planted = { ...vault, iv: 'cGxhbnRlZA==' }
+  const file = makeLogFile([
+    { sequence: 1, ops: [{ key: 'KeyringController', value: JSON.stringify({ vault: JSON.stringify(vault) }) }] },
+    // A website's tab title, which MetaMask keeps in another controller's state
+    { sequence: 2, ops: [{ key: 'SubjectMetadataController', value: JSON.stringify({ subjectMetadata: { 'https://example.com': { name: JSON.stringify(planted) } } }) }] },
+  ])
+  const { vaults } = findVaults([{ name: '000003.log', bytes: file }])
+  assert.deepEqual(vaults.map(v => [v.vault.iv, v.inKeyringController]), [[vault.iv, true], [planted.iv, false]])
+})
+
+test('tells KeyringController.vault apart from other vaults in the "data" key', () => {
+  const planted = { ...vault, iv: 'cGxhbnRlZA==' }
+  const state = JSON.stringify({
+    KeyringController: { vault: JSON.stringify(vault) },
+    NftController: { allNfts: { '0x1': [{ name: JSON.stringify(planted) }] } },
+  })
+  const { vaults } = findVaults([{ name: '000003.log', bytes: makeLogFile([{ sequence: 1, ops: [{ key: 'data', value: state }] }]) }])
+  assert.deepEqual(vaults.map(v => [v.vault.iv, v.inKeyringController]), [[vault.iv, true], [planted.iv, false]])
+})
+
 test('groups sources by file and key', () => {
   assert.deepEqual(groupSources([
     { file: 'a.log', key: 'data', sequence: 3 },

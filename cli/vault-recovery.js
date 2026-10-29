@@ -24,7 +24,8 @@ Finds MetaMask vaults in files or folders (folders are searched recursively for
 Usual paths, inside a Chromium browser profile:
   Local Extension Settings/nkbihfbeogaeaoehlefnkodbefgpgknn
   IndexedDB/chrome-extension_nkbihfbeogaeaoehlefnkodbefgpgknn_0.indexeddb.leveldb
-(Edge uses the id ejbalbakoplchlghecdalmeeeajnimhm.)
+(Edge uses the id ejbalbakoplchlghecdalmeeeajnimhm.) Give these folders, not the
+whole profile: websites can write files there that look like a vault.
 
 Options:
   --show-secrets  Print the secret recovery phrase and the private keys
@@ -36,6 +37,19 @@ Options:
 const LEVELDB_FILE = /\.(ldb|log|sst)$/i
 const WRONG_PASSWORD = 'wrong password'
 const NOT_TRIED = 'no password tried'
+// C0 and C1 controls (terminal escape sequences, line breaks) and bidi overrides
+const CONTROL = /[\x00-\x1f\x7f-\x9f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g
+
+/**
+ * File names and text read from the files can be crafted to fake the output, e.g. a
+ * second vault with another phrase: their control characters are shown as '?'.
+ *
+ * @param {unknown} text - Text to print.
+ * @returns {string} Text without control characters.
+ */
+function printable (text) {
+  return String(text).replace(CONTROL, '?')
+}
 
 /** @type {import('node:readline').Interface | undefined} */
 let stdinLines
@@ -118,6 +132,7 @@ function promptHidden (question) {
  */
 function describeSources (sources) {
   return groupSources(sources).map(({ file, key, minSequence, maxSequence, count }) => {
+    file = printable(file)
     if (key === null) {
       return `${file} (raw scan)`
     }
@@ -132,8 +147,11 @@ function printVault (index, entry, showSecrets) {
   for (const line of describeSources(entry.sources)) {
     console.log(`  Found in: ${line}`)
   }
+  if (!entry.inKeyringController) {
+    console.log('  Not where MetaMask keeps its vault: it can be a damaged copy, or text that a website or another extension wrote.')
+  }
   if (entry.error) {
-    console.log(`  Not decrypted: ${entry.error}`)
+    console.log(`  Not decrypted: ${printable(entry.error)}`)
     return
   }
   if (entry.sameAs !== undefined) {
@@ -141,12 +159,12 @@ function printVault (index, entry, showSecrets) {
     return
   }
   for (const keyring of entry.keyrings) {
-    console.log(`  ${keyring.type}`)
+    console.log(`  ${printable(keyring.type)}`)
     if (keyring.mnemonic && showSecrets) {
       console.log(`    Secret recovery phrase: ${keyring.mnemonic}`)
     }
     for (const account of keyring.accounts) {
-      console.log(`    ${account.address}${account.path ? `  ${account.path}` : ''}`)
+      console.log(`    ${printable(account.address)}${account.path ? `  ${printable(account.path)}` : ''}`)
       if (account.privateKey && showSecrets) {
         console.log(`      Private key: ${account.privateKey}`)
       }
@@ -158,9 +176,10 @@ function printVault (index, entry, showSecrets) {
 }
 
 function toJson (entries, showSecrets) {
-  return entries.map(({ vault, sources, error, sameAs, keyrings }) => ({
+  return entries.map(({ vault, sources, inKeyringController, error, sameAs, keyrings }) => ({
     vault,
     sources,
+    inKeyringController,
     error,
     sameAs,
     keyrings: keyrings?.map(({ mnemonic, accounts, ...keyring }) => ({
@@ -204,7 +223,7 @@ async function main () {
   const files = collectFiles(positionals)
   const { vaults, errors } = findVaults(files)
   for (const { file, message } of errors) {
-    log(`Warning: ${file}: ${message}, scanned as raw bytes`)
+    log(`Warning: ${printable(file)}: ${printable(message)}, scanned as raw bytes`)
   }
   log(`${files.length} file(s) read, ${vaults.length} vault(s) found`)
   if (!vaults.length) {
@@ -265,6 +284,6 @@ async function main () {
 }
 
 main().catch(err => {
-  console.error(err.message)
+  console.error(printable(err.message))
   process.exitCode = 1
 })

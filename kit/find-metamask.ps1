@@ -76,7 +76,9 @@ Write-Host "Found $($found.Count) MetaMask folder(s):"
 foreach ($dir in $found) {
   $files = @(Get-ChildItem -LiteralPath $dir.FullName -File -Recurse -Force)
   $size = ($files | Measure-Object -Property Length -Sum).Sum
-  Write-Host ("  {0}  ({1} files, {2:N0} KB)" -f (Get-RelativePath $dir.FullName), $files.Count, ($size / 1KB))
+  # Folder names can hold control characters and bidi overrides that fake the listing
+  $name = (Get-RelativePath $dir.FullName) -replace '[\x00-\x1f\x7f-\x9f\u200e\u200f\u202a-\u202e\u2066-\u2069]', '?'
+  Write-Host ("  {0}  ({1} files, {2:N0} KB)" -f $name, $files.Count, ($size / 1KB))
 }
 
 if (-not $Destination) {

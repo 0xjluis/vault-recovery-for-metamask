@@ -40,6 +40,24 @@ test('prints secrets in JSON only with --show-secrets', () => {
   assert.equal(entry.keyrings[1].accounts[0].privateKey, HARDHAT.imported.privateKey)
 })
 
+test('shows control characters from the files as ? and marks vaults found elsewhere', async t => {
+  const evil = mkdtempSync(join(tmpdir(), 'vault-recovery-'))
+  t.after(() => rmSync(evil, { recursive: true, force: true }))
+  const ledger = await encryptVault([{ type: 'Ledger\u001b[2J\nVault 9', data: { accounts: ['0xab\u001b]52;c;cHduZWQ=\u0007'] } }], 'right')
+  // A website's tab title holding a fake vault whose keyMetadata carries escape sequences
+  const planted = { ...ledger, iv: 'cGxhbnRlZA==', keyMetadata: { algorithm: '\u001b[8m', params: {} } }
+  writeFileSync(join(evil, '000003.log'), makeLogFile([
+    { sequence: 5, ops: [{ key: 'KeyringController', value: JSON.stringify({ vault: JSON.stringify(ledger) }) }] },
+    { sequence: 6, ops: [{ key: 'SubjectMetadataController', value: JSON.stringify({ name: JSON.stringify(planted) }) }] },
+  ]))
+  const { stdout, status } = run([evil], 'right\n')
+  assert.equal(status, 0)
+  assert.doesNotMatch(stdout, /[\x00-\x09\x0b-\x1f\x7f]/)
+  assert.match(stdout, /Ledger\?\[2J\?Vault 9/)
+  assert.match(stdout, /0xab\?\]52;c;cHduZWQ=\?/)
+  assert.match(stdout, /Vault 2\n.*key SubjectMetadataController.*\n {2}Not where MetaMask keeps its vault.*\n {2}Not decrypted: Unsupported key derivation\n/)
+})
+
 test('fails when no password works', () => {
   const { stdout, status } = run([dir], 'wrong\n')
   assert.equal(status, 1)

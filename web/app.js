@@ -108,10 +108,13 @@ async function scan (fileList, onlyLevelDB) {
   $('scan-status').textContent = `${files.length} file(s) read, ${vaults.length} vault(s) found.`
     + (errors.length ? ` ${errors.length} file(s) could not be parsed and were scanned as raw bytes.` : '')
   const list = $('vault-list')
-  list.replaceChildren(...vaults.map(({ sources }) => {
+  list.replaceChildren(...vaults.map(({ sources, inKeyringController }) => {
     const item = el('li')
     for (const group of groupSources(sources)) {
       item.append(el('div', 'source mono', describeSource(group)))
+    }
+    if (!inKeyringController) {
+      item.append(el('div', 'error', 'Not where MetaMask keeps its vault: it can be a damaged copy, or text that a website or another extension wrote.'))
     }
     return item
   }))

@@ -69,7 +69,9 @@ echo "Found ${#found[@]} MetaMask folder(s):"
 for dir in "${found[@]}"; do
   files=$(find "$dir" -type f | wc -l | tr -d ' ')
   size=$(du -sh "$dir" 2>/dev/null | cut -f1)
-  echo "  ${dir#"$root"/}  ($files files, $size)"
+  # Folder names can hold terminal escape sequences: show control characters as '?'
+  name=$(printf '%s' "${dir#"$root"/}" | LC_ALL=C tr '[:cntrl:]' '?')
+  echo "  $name  ($files files, $size)"
 done
 
 if [ -z "$dest" ]; then

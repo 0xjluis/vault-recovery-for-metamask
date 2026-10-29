@@ -136,7 +136,8 @@ node vault-recovery.mjs <copied folder>
 
 Both tools:
 
-- show every distinct vault, newest first, and where each one was found;
+- show every distinct vault and where each one was found: first those found where MetaMask keeps its vault, newest
+  first, then those marked "Not where MetaMask keeps its vault" (damaged copies, or text a website wrote);
 - ask for another password when some vaults do not open with the first one;
 - show the addresses first; the secret recovery phrase and the private keys appear only when you tick **Show the
   secret recovery phrase and the private keys** in the page, or add `--show-secrets` to the command;

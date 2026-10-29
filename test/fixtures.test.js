@@ -24,6 +24,7 @@ for (const { dir, mnemonic, password } of FIXTURES) {
     const { vaults, errors } = findVaults(files)
     assert.deepEqual(errors, [])
     assert.ok(vaults.length >= 1)
+    assert.ok(vaults.every(found => found.inKeyringController))
     for (const { vault } of vaults) {
       const [hd] = await describeKeyrings(await decryptVault(vault, password))
       assert.equal(hd.mnemonic, mnemonic)
@@ -36,6 +37,7 @@ test('recovers the IndexedDB backup written by Chrome', async () => {
   const { vaults } = findVaults([{ name: '000003.log', bytes }])
   assert.equal(vaults.length, 1)
   assert.equal(vaults[0].sources[0].key, 'KeyringController')
+  assert.equal(vaults[0].inKeyringController, true)
   const [hd, imported] = await describeKeyrings(await decryptVault(vaults[0].vault, 'idb-test'))
   assert.equal(hd.mnemonic, HARDHAT.mnemonic)
   assert.deepEqual(hd.accounts.map(a => a.address), HARDHAT.addresses)

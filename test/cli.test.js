@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
@@ -56,6 +56,27 @@ test('shows control characters from the files as ? and marks vaults found elsewh
   assert.match(stdout, /Ledger\?\[2J\?Vault 9/)
   assert.match(stdout, /0xab\?\]52;c;cHduZWQ=\?/)
   assert.match(stdout, /Vault 2\n.*key SubjectMetadataController.*\n {2}Not where MetaMask keeps its vault.*\n {2}Not decrypted: Unsupported key derivation\n/)
+})
+
+test('skips links and paths it cannot read instead of stopping', t => {
+  const base = mkdtempSync(join(tmpdir(), 'vault-recovery-'))
+  t.after(() => rmSync(base, { recursive: true, force: true }))
+  const profile = join(base, 'profile')
+  const outside = join(base, 'outside')
+  mkdirSync(profile)
+  mkdirSync(outside)
+  copyFileSync(join(dir, '000003.log'), join(profile, '000003.log'))
+  copyFileSync(join(dir, '000003.log'), join(outside, '000004.log'))
+  // A loop, like the 'Application Data' junction of Windows profiles, and a way out of the copy
+  const type = process.platform === 'win32' ? 'junction' : 'dir'
+  symlinkSync(profile, join(profile, 'loop'), type)
+  symlinkSync(outside, join(profile, 'outside'), type)
+  const { stdout, status } = run([profile, join(base, 'missing')], 'right\n')
+  assert.equal(status, 0)
+  assert.match(stdout, /loop: link not followed/)
+  assert.match(stdout, /outside: link not followed/)
+  assert.match(stdout, /Warning: ENOENT.*missing.*skipped/)
+  assert.match(stdout, /1 file\(s\) read, 1 vault\(s\) found/)
 })
 
 test('fails when no password works', () => {

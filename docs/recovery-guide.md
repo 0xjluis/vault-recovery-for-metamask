@@ -162,6 +162,8 @@ Both tools:
 | Problem | What to check |
 | --- | --- |
 | The kit finds nothing | Search a wider folder (the whole disk), check the user and browser. Firefox keeps extension data in a different format that this tool does not read yet |
+| The kit says some folders could not be read | On a disk from another computer, user folders belong to that computer's users. Run the kit as root (`sudo`) on Linux and macOS, or PowerShell as administrator on Windows; MetaMask's folders may be among those it could not search |
+| The kit or the command line skip links | Links and junctions are not followed, so they cannot loop or lead to files outside the copy. MetaMask's own folders never contain them |
 | A vault does not open with any password | It may come from another profile or an older installation with another password. Every vault is independent |
 | Files are reported as "scanned as raw bytes" | They are damaged. Vaults are still searched in them, but some older copies may be lost |
 | The page stays locked offline | The browser still reports a connection, often because of a virtual network adapter (VPN, virtual machines, WSL). Disable it, or use the command-line tool |

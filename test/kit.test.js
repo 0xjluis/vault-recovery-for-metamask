@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { after, describe, test } from 'node:test'
@@ -29,18 +29,42 @@ const DECOYS = [
   `Users/alice/Documents/${CHROME_ID}/notes.txt`,
 ]
 
+// A user folder this user cannot read, as on a disk moved from another computer
+const LOCKED = 'Users/bob/AppData'
+const LOCKED_FILE = `${LOCKED}/Local/Google/Chrome/User Data/Default/Local Extension Settings/${CHROME_ID}/000003.log`
+
+/**
+ * @param {string} dir - Folder.
+ * @param {boolean} readable - Whether this user can list it.
+ */
+function setReadable (dir, readable) {
+  if (process.platform === 'win32') {
+    const user = process.env.USERNAME
+    spawnSync('icacls', readable ? [dir, '/remove:d', user] : [dir, '/deny', `${user}:(RX)`])
+  } else {
+    chmodSync(dir, readable ? 0o755 : 0)
+  }
+}
+
 const root = mkdtempSync(join(tmpdir(), 'kit-disk-'))
 const work = mkdtempSync(join(tmpdir(), 'kit-out-'))
 after(() => {
+  setReadable(join(root, LOCKED), true)
   rmSync(root, { recursive: true, force: true })
   rmSync(work, { recursive: true, force: true })
 })
-for (const file of [...EXPECTED, ...DECOYS]) {
+for (const file of [...EXPECTED, ...DECOYS, LOCKED_FILE]) {
   mkdirSync(join(root, dirname(file)), { recursive: true })
   writeFileSync(join(root, file), `contents of ${file}`)
 }
+const linkType = process.platform === 'win32' ? 'junction' : 'dir'
 // Windows profiles have junctions pointing to their own parent ('Application Data')
-symlinkSync(join(root, LOCAL), join(root, LOCAL, 'Application Data'), process.platform === 'win32' ? 'junction' : 'dir')
+symlinkSync(join(root, LOCAL), join(root, LOCAL, 'Application Data'), linkType)
+// A link inside a MetaMask folder: what it points to must not end up in the copy
+symlinkSync(join(root, 'Users/alice/Documents'), join(root, dirname(EXPECTED[0]), 'linked'), linkType)
+setReadable(join(root, LOCKED), false)
+// Root reads every folder anyway
+const lockSkip = process.getuid?.() === 0 && 'running as root'
 
 function listFiles (dir, prefix = '') {
   return readdirSync(join(dir, prefix), { withFileTypes: true }).flatMap(entry => {
@@ -86,12 +110,20 @@ describe('find-metamask.sh', { skip: !bash && 'bash not available' }, () => {
     const { stdout, stderr, status } = run(root, dest)
     assert.equal(status, 0, stderr)
     assert.match(stdout, /Copy verified/)
+    assert.match(stderr, /Not copied, not a regular file: .*\/linked/)
     checkCopy(dest)
   })
 
   test('fails when nothing is found', () => {
     const { status } = run(join(root, 'Users/alice/Documents'))
     assert.equal(status, 1)
+  })
+
+  test('reports the folders it cannot read', { skip: lockSkip }, () => {
+    const { stderr, status } = run(join(root, 'Users/bob'))
+    assert.equal(status, 1)
+    assert.match(stderr, /1 folder\(s\) could not be read/)
+    assert.match(stderr, /sudo/)
   })
 })
 
@@ -109,11 +141,20 @@ describe('find-metamask.ps1', { skip: process.platform !== 'win32' && 'Windows o
     const { stdout, stderr, status } = run('-Root', root, '-Destination', dest)
     assert.equal(status, 0, stderr)
     assert.match(stdout, /Copy verified/)
+    // Warnings are wrapped at the console width
+    assert.match(stdout + stderr, /Not copied, junction or symbolic link: [\s\S]*\\linked/)
     checkCopy(dest)
   })
 
   test('fails when nothing is found', () => {
     const { status } = run('-Root', join(root, 'Users/alice/Documents'))
     assert.equal(status, 1)
+  })
+
+  test('reports the folders it cannot read', () => {
+    const { stdout, stderr, status } = run('-Root', join(root, 'Users/bob'))
+    assert.equal(status, 1)
+    assert.match(stdout + stderr, /1 folder\(s\) could not be read/)
+    assert.match(stdout + stderr, /administrator/)
   })
 })

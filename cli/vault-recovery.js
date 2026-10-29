@@ -2,7 +2,7 @@
 // Finds and decrypts MetaMask vaults in browser profile folders. Works offline: it only
 // reads the files it is given and never opens a network connection.
 
-import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { lstatSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { parseArgs } from 'node:util'
@@ -35,6 +35,8 @@ Options:
 `
 
 const LEVELDB_FILE = /\.(ldb|log|sst)$/i
+// Far above the LevelDB files a browser writes; larger files are not read into memory
+const MAX_FILE_SIZE = 256 * 1024 * 1024
 const WRONG_PASSWORD = 'wrong password'
 const NOT_TRIED = 'no password tried'
 // C0 and C1 controls (terminal escape sequences, line breaks) and bidi overrides
@@ -57,19 +59,37 @@ let stdinLines
 let stdinIterator
 
 /**
+ * Links inside folders are not followed: they can loop, like the 'Application Data'
+ * junction of Windows profiles, or lead out of the copy, e.g. to this computer's disk.
+ * Only regular files are read, so a FIFO or a device cannot block the search. What
+ * cannot be read is reported and skipped.
+ *
  * @param {string[]} paths - Files or folders given by the user.
+ * @param {(message: string) => void} warn - Reports what was skipped.
  * @returns {{name: string, bytes: Uint8Array}[]} Files to search.
  */
-function collectFiles (paths) {
+function collectFiles (paths, warn) {
   const files = []
   const visit = (path, explicit, base) => {
-    const stats = statSync(path)
-    if (stats.isDirectory()) {
-      for (const entry of readdirSync(path)) {
-        visit(join(path, entry), false, base)
+    try {
+      const stats = explicit ? statSync(path) : lstatSync(path)
+      if (stats.isSymbolicLink()) {
+        warn(`${path}: link not followed`)
+      } else if (stats.isDirectory()) {
+        for (const entry of readdirSync(path)) {
+          visit(join(path, entry), false, base)
+        }
+      } else if (explicit || LEVELDB_FILE.test(path)) {
+        if (!stats.isFile()) {
+          warn(`${path}: not a regular file, skipped`)
+        } else if (stats.size > MAX_FILE_SIZE) {
+          warn(`${path}: larger than ${MAX_FILE_SIZE / 1024 / 1024} MiB, skipped`)
+        } else {
+          files.push({ name: relative(base, path) || path, bytes: new Uint8Array(readFileSync(path)) })
+        }
       }
-    } else if (explicit || LEVELDB_FILE.test(path)) {
-      files.push({ name: relative(base, path) || path, bytes: new Uint8Array(readFileSync(path)) })
+    } catch (err) {
+      warn(`${err.message}, skipped`)
     }
   }
   // Names relative to the folder holding each path given, e.g. 'IndexedDB/…/000003.log'
@@ -220,7 +240,7 @@ async function main () {
   }
 
   const log = values.json ? console.error : console.log
-  const files = collectFiles(positionals)
+  const files = collectFiles(positionals, message => log(`Warning: ${printable(message)}`))
   const { vaults, errors } = findVaults(files)
   for (const { file, message } of errors) {
     log(`Warning: ${printable(file)}: ${printable(message)}, scanned as raw bytes`)

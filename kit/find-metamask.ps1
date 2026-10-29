@@ -40,6 +40,42 @@ function Get-RelativePath([string]$path) {
   return $path.Substring($rootPath.Length).TrimStart('\')
 }
 
+# Names can hold control characters and bidi overrides that fake the output
+function Get-Printable([string]$text) {
+  return $text -replace '[\x00-\x1f\x7f-\x9f\u200e\u200f\u202a-\u202e\u2066-\u2069]', '?'
+}
+
+# Folders that cannot be read are reported: on a disk from another computer, MetaMask's
+# folders are often in a user folder that only its owner can read
+$unreadable = New-Object System.Collections.Generic.List[string]
+
+# Regular files under a MetaMask folder, without following junctions or symbolic links:
+# they can loop, or point anywhere on this computer and copy its files to the destination
+function Get-RegularFiles([System.IO.DirectoryInfo]$top) {
+  $files = New-Object System.Collections.Generic.List[System.IO.FileInfo]
+  $pending = New-Object System.Collections.Generic.Stack[System.IO.DirectoryInfo]
+  $pending.Push($top)
+  while ($pending.Count -gt 0) {
+    $dir = $pending.Pop()
+    try {
+      $entries = $dir.GetFileSystemInfos()
+    } catch {
+      $unreadable.Add($dir.FullName)
+      continue
+    }
+    foreach ($entry in $entries) {
+      if ($entry.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+        Write-Warning "Not copied, junction or symbolic link: $(Get-Printable (Get-RelativePath $entry.FullName))"
+      } elseif ($entry -is [System.IO.DirectoryInfo]) {
+        $pending.Push($entry)
+      } else {
+        $files.Add($entry)
+      }
+    }
+  }
+  return ,$files
+}
+
 Write-Host "Searching $rootPath (this can take a few minutes on a whole disk)..."
 # Depth-first walk that skips junctions and symlinks: profiles contain junctions such as
 # 'Application Data' that point to their own parent and would loop forever
@@ -51,6 +87,7 @@ while ($stack.Count -gt 0) {
   try {
     $children = $dir.GetDirectories()
   } catch {
+    $unreadable.Add($dir.FullName)
     continue
   }
   foreach ($child in $children) {
@@ -67,6 +104,19 @@ while ($stack.Count -gt 0) {
   }
 }
 
+$regularFiles = @{}
+foreach ($dir in $found) {
+  $regularFiles[$dir.FullName] = Get-RegularFiles $dir
+}
+
+if ($unreadable.Count -gt 0) {
+  Write-Warning "$($unreadable.Count) folder(s) could not be read, and were not searched:"
+  foreach ($path in ($unreadable | Select-Object -First 10)) {
+    Write-Host "  $(Get-Printable $path)"
+  }
+  Write-Host 'Run PowerShell as administrator, or give your user access to those folders.'
+}
+
 if ($found.Count -eq 0) {
   Write-Host "No MetaMask folders found under $rootPath"
   exit 1
@@ -74,11 +124,9 @@ if ($found.Count -eq 0) {
 
 Write-Host "Found $($found.Count) MetaMask folder(s):"
 foreach ($dir in $found) {
-  $files = @(Get-ChildItem -LiteralPath $dir.FullName -File -Recurse -Force)
+  $files = $regularFiles[$dir.FullName]
   $size = ($files | Measure-Object -Property Length -Sum).Sum
-  # Folder names can hold control characters and bidi overrides that fake the listing
-  $name = (Get-RelativePath $dir.FullName) -replace '[\x00-\x1f\x7f-\x9f\u200e\u200f\u202a-\u202e\u2066-\u2069]', '?'
-  Write-Host ("  {0}  ({1} files, {2:N0} KB)" -f $name, $files.Count, ($size / 1KB))
+  Write-Host ("  {0}  ({1} files, {2:N0} KB)" -f (Get-Printable (Get-RelativePath $dir.FullName)), $files.Count, ($size / 1KB))
 }
 
 if (-not $Destination) {
@@ -91,14 +139,15 @@ New-Item -ItemType Directory -Path $out -Force | Out-Null
 
 $sums = New-Object System.Collections.Generic.List[string]
 foreach ($dir in $found) {
-  $rel = Get-RelativePath $dir.FullName
-  $target = Join-Path $out (Split-Path $rel -Parent)
-  New-Item -ItemType Directory -Path $target -Force | Out-Null
-  Copy-Item -LiteralPath $dir.FullName -Destination $target -Recurse -Force
-  # Checksums of the SOURCE files, with the paths they have in the copy
-  foreach ($file in Get-ChildItem -LiteralPath $dir.FullName -File -Recurse -Force) {
+  # File by file, only the regular files found above
+  foreach ($file in $regularFiles[$dir.FullName]) {
+    $rel = Get-RelativePath $file.FullName
+    $target = Join-Path $out $rel
+    New-Item -ItemType Directory -Path (Split-Path $target -Parent) -Force | Out-Null
+    Copy-Item -LiteralPath $file.FullName -Destination $target -Force
+    # Checksums of the SOURCE files, with the paths they have in the copy
     $hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-    $sums.Add("$hash  ./" + (Get-RelativePath $file.FullName).Replace('\', '/'))
+    $sums.Add("$hash  ./" + $rel.Replace('\', '/'))
   }
 }
 
